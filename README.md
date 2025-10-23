@@ -1,5 +1,9 @@
 # Quick-c
 
+<a href="https://dotfyle.com/plugins/AuroBreeze/quick-py">
+	<img src="https://dotfyle.com/plugins/AuroBreeze/quick-py/shield?style=for-the-badge" />
+</a>
+
 一个面向 C/C++ 的轻量 Neovim 插件：一键编译、运行与调试当前文件，支持 Windows、Linux、macOS，兼容 betterTerm 与内置终端，并可选自动保存后构建运行。
 
 ## 特性

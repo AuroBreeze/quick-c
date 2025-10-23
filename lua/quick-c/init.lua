@@ -1,0 +1,314 @@
+local M = {}
+
+M.config = {
+  -- outdir = "source" 表示输出到源码所在目录；也可设置为自定义目录
+  outdir = "source",
+  -- 用户可覆盖：为不同系统/工具链提供命令模板
+  toolchain = {
+    windows = { c = { "gcc", "cl" }, cpp = { "g++", "cl" } },
+    unix = { c = { "gcc", "clang" }, cpp = { "g++", "clang++" } },
+  },
+  compile_cmds = {
+    gcc = function(ft, sources, out)
+      local cc = (ft == "c") and "gcc" or "g++"
+      return { cc, "-g", "-O0", "-Wall", "-Wextra", unpack(sources), "-o", out }
+    end,
+    clang = function(ft, sources, out)
+      local cc = (ft == "c") and "clang" or "clang++"
+      return { cc, "-g", "-O0", "-Wall", "-Wextra", unpack(sources), "-o", out }
+    end,
+    cl = function(ft, sources, out)
+      -- cl 不同语法：/Fe:指定输出
+      return vim.list_extend({ "cl", "/Zi", "/Od" }, sources, 1, #sources), { [0] = out }
+    end,
+  },
+  runtime = {
+    windows = { command = "powershell", args = function(exe) return { "-NoExit", "-Command", string.format("& '%s'", exe) } end },
+    unix = { command = nil, args = function(exe) return { exe } end },
+  },
+  autorun = {
+    enabled = false,
+    events = { "BufWritePost" },
+    filetypes = { "c", "cpp" },
+  },
+  terminal = {
+    open = true,     -- 使用内置终端时自动打开
+    height = 12,     -- 内置终端高度
+  },
+  betterterm = {
+    enabled = true,      -- 优先使用 betterTerm（若已安装）
+    index = 0,
+    send_delay = 200,
+    focus_on_run = true,
+    open_if_closed = true,
+  },
+}
+
+local function is_windows()
+  return vim.fn.has("win32") == 1
+end
+
+local function is_powershell()
+  local sh = (vim.o.shell or ""):lower()
+  return sh:find("powershell") or sh:find("pwsh")
+end
+
+local function ensure_outdir(dir)
+  vim.fn.mkdir(dir, "p")
+end
+
+local function default_out_name(sources)
+  local ext = is_windows() and ".exe" or ""
+  if #sources == 1 then
+    local base = vim.fn.fnamemodify(sources[1], ":t:r")
+    return base .. ext
+  else
+    local name = vim.fn.input("Output name: ", "a.out", "file")
+    if name == nil or name == "" then name = "a.out" end
+    if is_windows() and not name:match("%.exe$") then name = name .. ".exe" end
+    return name
+  end
+end
+
+local function gather_sources()
+  -- 默认：只编译当前缓冲文件
+  return { vim.fn.expand("%:p") }
+end
+
+local function choose_compiler(ft)
+  -- 用户可覆盖 compile_cmds 和 toolchain
+  local c = M.config
+  local domain = is_windows() and c.toolchain.windows or c.toolchain.unix
+  local candidates = (ft == "c") and domain.c or domain.cpp
+  for _, name in ipairs(candidates) do
+    -- 允许 gcc/g++、clang/clang++、cl
+    if name == "gcc" or name == "g++" then
+      if vim.fn.executable(name) == 1 then return name, "gcc" end
+    elseif name == "clang" or name == "clang++" then
+      if vim.fn.executable(name) == 1 then return name, "clang" end
+    elseif name == "cl" then
+      if vim.fn.executable("cl") == 1 then return "cl", "cl" end
+    end
+  end
+  return nil, nil
+end
+
+local function build_cmd(ft, sources, out)
+  local _, family = choose_compiler(ft)
+  if not family then return nil end
+  if family == "cl" then
+    local args = { "cl", "/Zi", "/Od" }
+    for _, s in ipairs(sources) do table.insert(args, s) end
+    table.insert(args, "/Fe:" .. out)
+    return args
+  elseif family == "gcc" then
+    local cc = (ft == "c") and "gcc" or "g++"
+    local cmd = { cc, "-g", "-O0", "-Wall", "-Wextra" }
+    for _, s in ipairs(sources) do table.insert(cmd, s) end
+    table.insert(cmd, "-o")
+    table.insert(cmd, out)
+    return cmd
+  else -- clang family
+    local cc = (ft == "c") and "clang" or "clang++"
+    local cmd = { cc, "-g", "-O0", "-Wall", "-Wextra" }
+    for _, s in ipairs(sources) do table.insert(cmd, s) end
+    table.insert(cmd, "-o")
+    table.insert(cmd, out)
+    return cmd
+  end
+end
+
+local function resolve_out_path(sources, name)
+  local outdir = M.config.outdir
+  if outdir == "source" then
+    local dir = vim.fn.fnamemodify(sources[1], ":p:h")
+    return dir .. "/" .. name
+  else
+    ensure_outdir(outdir)
+    return outdir .. "/" .. name
+  end
+end
+
+local function notify_err(msg) vim.notify("Quick-c: " .. msg, vim.log.levels.ERROR) end
+local function notify_info(msg) vim.notify("Quick-c: " .. msg, vim.log.levels.INFO) end
+local function notify_warn(msg) vim.notify("Quick-c: " .. msg, vim.log.levels.WARN) end
+
+-- quick-py like terminal helpers
+local function run_in_native_terminal(cmd)
+  if M.config.terminal.open then
+    vim.cmd("botright split | terminal")
+    vim.cmd(string.format("resize %d", M.config.terminal.height or 12))
+  else
+    vim.cmd("terminal")
+  end
+  local chan = vim.b.terminal_job_id
+  if not chan then return false end
+  vim.defer_fn(function()
+    vim.fn.chansend(chan, cmd .. (is_windows() and "\r" or "\n"))
+  end, 100)
+  return true
+end
+
+local function run_in_betterterm(cmd)
+  local ok, betterTerm = pcall(require, 'betterTerm')
+  if not ok or M.config.betterterm.enabled == false then return false end
+  local cfg = M.config.betterterm or {}
+  local idx = cfg.index or 0
+  local delay = cfg.send_delay or 200
+  local focus = (cfg.focus_on_run ~= false)
+  local open_first = (cfg.open_if_closed ~= false)
+  if open_first or focus then pcall(betterTerm.open, idx) end
+  vim.defer_fn(function()
+    local ok_send, err = pcall(betterTerm.send, cmd .. (is_windows() and '\r' or '\n'), idx)
+    if not ok_send then
+      notify_warn('发送到 betterTerm 失败，改用内置终端: ' .. tostring(err))
+      if not run_in_native_terminal(cmd) then
+        notify_err('内置终端打开失败')
+      end
+      return
+    end
+  end, delay)
+  return true
+end
+
+local function build(sources, target_name)
+  local ft = vim.bo.filetype
+  if ft ~= "c" and ft ~= "cpp" then
+    notify_warn("仅支持 c/cpp 文件")
+    return
+  end
+  sources = sources or gather_sources()
+  if not sources or #sources == 0 then
+    notify_warn("未找到源码文件")
+    return
+  end
+  local name = target_name or default_out_name(sources)
+  local exe = resolve_out_path(sources, name)
+  local cmd = build_cmd(ft, sources, exe)
+  if not cmd then
+    notify_err("未找到可用编译器，请检查 PATH 或在 setup 中自定义 compile 命令")
+    return
+  end
+  local ok = vim.fn.jobstart(cmd, {
+    stdout_buffered = true,
+    stderr_buffered = true,
+    detach = false,
+    on_stderr = function(_, d)
+      if d and #d > 0 then notify_warn(table.concat(d, "\n")) end
+    end,
+    on_exit = function(_, code)
+      if code == 0 then
+        notify_info("Build OK -> " .. exe)
+      else
+        notify_err("Build failed (" .. code .. ")")
+      end
+    end,
+  })
+  if ok <= 0 then notify_err("启动编译进程失败") end
+end
+
+local function run(exe)
+  local cur = { vim.fn.expand("%:p") }
+  exe = exe or resolve_out_path(cur, default_out_name(cur))
+  if vim.fn.filereadable(exe) ~= 1 then
+    notify_warn("未找到可执行文件，请先构建")
+    return
+  end
+  local cmd
+  if is_windows() then
+    if is_powershell() then
+      cmd = string.format("& '%s'", exe)
+    else
+      cmd = string.format('"%s"', exe)
+    end
+  else
+    cmd = string.format("'%s'", exe)
+  end
+  if not run_in_betterterm(cmd) then
+    if not run_in_native_terminal(cmd) then
+      notify_err("无法运行命令：无法打开终端")
+    end
+  end
+end
+
+local function build_and_run()
+  build()
+  vim.defer_fn(function() run() end, 200)
+end
+
+local function debug_run(exe)
+  local cur = { vim.fn.expand("%:p") }
+  exe = exe or resolve_out_path(cur, default_out_name(cur))
+  if vim.fn.filereadable(exe) ~= 1 then
+    notify_warn("未找到可执行文件，请先构建")
+    return
+  end
+  local ok, dap = pcall(require, "dap")
+  if not ok then
+    notify_err("未找到 nvim-dap")
+    return
+  end
+  dap.run({
+    type = "codelldb",
+    request = "launch",
+    name = "Quick-c Debug",
+    program = exe,
+    cwd = vim.fn.getcwd(),
+    stopOnEntry = false,
+    runInTerminal = true,
+    initCommands = { "settings set target.process.thread.step-avoid-libraries true" },
+  })
+end
+
+function M.setup(opts)
+  M.config = vim.tbl_deep_extend("force", M.config, opts or {})
+  vim.api.nvim_create_user_command("QuickCBuild", function()
+    build()
+  end, {})
+  vim.api.nvim_create_user_command("QuickCRun", function()
+    run()
+  end, {})
+  vim.api.nvim_create_user_command("QuickCBR", function()
+    build_and_run()
+  end, {})
+  vim.api.nvim_create_user_command("QuickCDebug", function()
+    debug_run()
+  end, {})
+
+  -- autorun (build & run on save)
+  local group = vim.api.nvim_create_augroup("QuickC_AutoRun", { clear = true })
+  local function ft_enabled(ft)
+    for _, f in ipairs(M.config.autorun.filetypes or {}) do
+      if f == ft then return true end
+    end
+    return false
+  end
+  local function setup_autorun()
+    if not M.config.autorun.enabled then return end
+    for _, ev in ipairs(M.config.autorun.events or { "BufWritePost" }) do
+      vim.api.nvim_create_autocmd(ev, {
+        group = group,
+        callback = function(args)
+          local ft = vim.bo[args.buf].filetype
+          if not ft_enabled(ft) then return end
+          build_and_run()
+        end,
+      })
+    end
+  end
+  setup_autorun()
+  vim.api.nvim_create_user_command("QuickCAutoRunToggle", function()
+    M.config.autorun.enabled = not M.config.autorun.enabled
+    vim.api.nvim_clear_autocmds({ group = group })
+    setup_autorun()
+    vim.notify("Quick-c: autorun " .. (M.config.autorun.enabled and "enabled" or "disabled"))
+  end, {})
+
+  vim.keymap.set("n", "<leader>cb", build, { desc = "Quick-c: Compile current C/C++ file" })
+  vim.keymap.set("n", "<leader>cr", run, { desc = "Quick-c: Run current C/C++ exe" })
+  vim.keymap.set("n", "<leader>cR", build_and_run, { desc = "Quick-c: Build & Run current C/C++" })
+  vim.keymap.set("n", "<leader>cD", debug_run, { desc = "Quick-c: Debug current C/C++ exe" })
+end
+
+return M
+

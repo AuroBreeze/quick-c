@@ -4,17 +4,18 @@
 	<img src="https://dotfyle.com/plugins/AuroBreeze/quick-py/shield?style=for-the-badge" />
 </a>
 
-一个面向 C/C++ 的轻量 Neovim 插件：一键编译、运行与调试当前文件，支持 Windows、Linux、macOS，兼容 betterTerm 与内置终端，并可选自动保存后构建运行。
+一个面向 C/C++ 的轻量 Neovim 插件：一键编译、运行与调试当前文件，支持 Windows、Linux、macOS，兼容 betterTerm 与内置终端，并可选自动保存后构建运行。构建与运行全程异步，不会阻塞 Neovim 主线程。
 
 ## 特性
 
-- **一键构建/运行**：`QuickCBuild`、`QuickCRun`、`QuickCBR`（构建并运行）
+- **一键构建/运行（异步）**：`QuickCBuild`、`QuickCRun`、`QuickCBR`（构建并运行）
 - **调试集成**：`QuickCDebug` 使用 `nvim-dap` 与 `codelldb`
 - **跨平台**：自动选择可用编译器（gcc/clang/cl）与合适运行方式（PowerShell/终端）
 - **灵活输出位置**：默认将可执行文件输出到源码所在目录；可通过配置修改
 - **终端兼容**：优先将命令发送到 `betterTerm`（如已安装），否则使用 Neovim 内置终端
 - **自动运行**：可选保存后自动构建并运行（按文件类型过滤）
-- **便捷快捷键**：默认提供 `<leader>cb`、`<leader>cr`、`<leader>cR`、`<leader>cD`
+- **Make 集成（异步）**：自动解析 `make -qp` 目标，Telescope 选择执行（如 `clean`、`install`）
+- **便捷快捷键**：默认提供 `<leader>cb`、`<leader>cr`、`<leader>cR`、`<leader>cD`、`<leader>cm`
 
 ## 依赖
 
@@ -25,6 +26,7 @@
 - 可选：
   - [`betterTerm`](https://github.com/CRAG666/betterTerm.nvim)（若安装则优先使用）
   - 调试：[`nvim-dap`](https://github.com/mfussenegger/nvim-dap) 与 `codelldb`
+  - Make 选择器：[`nvim-telescope/telescope.nvim`](https://github.com/nvim-telescope/telescope.nvim) 与 [`nvim-lua/plenary.nvim`](https://github.com/nvim-lua/plenary.nvim)
 
 ## 安装
 
@@ -91,6 +93,12 @@ require("quick-c").setup({
     focus_on_run = true,
     open_if_closed = true,
   },
+  make = {
+    enabled = true,
+    prefer = nil, -- Windows 可设 "mingw32-make"
+    cwd = nil,    -- 默认使用当前文件所在目录
+    telescope = { prompt_title = "Quick-c Make Targets" },
+  },
 })
 ```
 
@@ -113,6 +121,8 @@ require("quick-c").setup({
 - `:QuickCBR` 构建并运行
 - `:QuickCDebug` 使用 `nvim-dap` 以 `codelldb` 调试可执行文件
 - `:QuickCAutoRunToggle` 切换保存即运行（受 `autorun.filetypes` 限制）
+- `:QuickCMake` 打开 Telescope 选择器列出可用 make 目标
+- `:QuickCMakeRun [target]` 直接运行指定 make 目标
 
 默认快捷键（普通模式）：
 
@@ -120,6 +130,7 @@ require("quick-c").setup({
 - `<leader>cr` → 运行
 - `<leader>cR` → 构建并运行
 - `<leader>cD` → 调试
+- `<leader>cm` → 打开 Make 目标选择器（Telescope）
 
 ## Windows 注意事项
 
@@ -143,6 +154,7 @@ require("quick-c").setup({
 - 构建失败但无输出：查看 Neovim `:messages` 或终端面板中的编译器警告/错误
 - 终端无法发送命令：如安装了 `betterTerm` 但发送失败，插件会自动回退到内置终端
 - 无法运行可执行文件：请先 `:QuickCBuild`；或检查输出目录与文件后缀（Windows 需要 `.exe`）
+ - 未解析到 make 目标：确认项目存在 `Makefile`，以及 `make -qp` 在该目录下可运行；Windows 可改用 `mingw32-make`
 
 ## 目录结构
 

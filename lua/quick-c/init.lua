@@ -42,10 +42,23 @@ M.config = {
     focus_on_run = true,
     open_if_closed = true,
   },
+  make = {
+    enabled = true,
+    prefer = nil, -- e.g. "make" | "mingw32-make"
+    cwd = nil,    -- 默认使用当前文件所在目录
+    telescope = { prompt_title = "Quick-c Make Targets" },
+  },
 }
 
 local function is_windows()
   return vim.fn.has("win32") == 1
+end
+
+local function choose_make()
+  if M.config.make and M.config.make.prefer then return M.config.make.prefer end
+  if vim.fn.executable("make") == 1 then return "make" end
+  if is_windows() and vim.fn.executable("mingw32-make") == 1 then return "mingw32-make" end
+  return nil
 end
 
 local function is_powershell()
@@ -310,6 +323,13 @@ function M.setup(opts)
   vim.api.nvim_create_user_command("QuickCDebug", function()
     debug_run()
   end, {})
+  vim.api.nvim_create_user_command("QuickCMake", function()
+    telescope_make()
+  end, {})
+  vim.api.nvim_create_user_command("QuickCMakeRun", function(opts)
+    local target = table.concat(opts.fargs or {}, " ")
+    make_run_target(target)
+  end, { nargs = "*" })
 
   -- autorun (build & run on save)
   local group = vim.api.nvim_create_augroup("QuickC_AutoRun", { clear = true })
@@ -344,6 +364,7 @@ function M.setup(opts)
   vim.keymap.set("n", "<leader>cr", run, { desc = "Quick-c: Run current C/C++ exe" })
   vim.keymap.set("n", "<leader>cR", build_and_run, { desc = "Quick-c: Build & Run current C/C++" })
   vim.keymap.set("n", "<leader>cD", debug_run, { desc = "Quick-c: Debug current C/C++ exe" })
+  vim.keymap.set("n", "<leader>cm", telescope_make, { desc = "Quick-c: Make targets (Telescope)" })
 end
 
 return M

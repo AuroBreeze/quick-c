@@ -105,6 +105,12 @@ function M.find_make_roots_async(config, start_dir, cb)
     local down = (cfg.search and cfg.search.down) or 3
     local names = { 'Makefile', 'makefile', 'GNUmakefile' }
     local uv = vim.loop
+    local ignore = (cfg.search and cfg.search.ignore_dirs) or { '.git', 'node_modules', '.cache' }
+
+    local function is_ignored(name)
+      for _, n in ipairs(ignore) do if name == n then return true end end
+      return false
+    end
 
     local cwd_root = U.norm(vim.fn.getcwd())
     local bases = {}
@@ -148,7 +154,7 @@ function M.find_make_roots_async(config, start_dir, cb)
             while true do
               local name, t = uv.fs_scandir_next(req)
               if not name then break end
-              if t == 'directory' and name ~= '.git' and name ~= 'node_modules' and name ~= '.cache' then
+              if t == 'directory' and not is_ignored(name) then
                 table.insert(queue, { dir = U.join(dir, name), depth = depth + 1 })
               end
             end

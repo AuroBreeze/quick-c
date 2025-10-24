@@ -63,10 +63,36 @@ local function default_out_name(sources)
     local base = vim.fn.fnamemodify(sources[1], ":t:r")
     return base .. ext
   else
-    local name = vim.fn.input("Output name: ", "a.out", "file")
-    if name == nil or name == "" then name = "a.out" end
+    -- 在异步流程中不再同步阻塞输入，这里仅返回默认值
+    local name = "a.out"
     if is_windows() and not name:match("%.exe$") then name = name .. ".exe" end
     return name
+  end
+end
+
+-- 异步获取输出名：当多源文件时使用 vim.ui.input（不会阻塞主线程）
+local function get_output_name_async(sources, preset_name, cb)
+  if preset_name and preset_name ~= "" then
+    cb(preset_name)
+    return
+  end
+  if #sources == 1 then
+    cb(default_out_name(sources))
+    return
+  end
+  local def = "a.out"
+  if is_windows() and not def:match("%.exe$") then def = def .. ".exe" end
+  local ui = vim.ui or {}
+  if ui.input then
+    ui.input({ prompt = "Output name: ", default = def }, function(input)
+      local name = input
+      if not name or name == "" then name = def end
+      if is_windows() and not name:match("%.exe$") then name = name .. ".exe" end
+      cb(name)
+    end)
+  else
+    -- 回退：若无 ui.input 则使用默认，不进行同步阻塞
+    cb(def)
   end
 end
 
@@ -171,7 +197,7 @@ local function run_in_betterterm(cmd)
   return true
 end
 
-local function build(sources, target_name)
+local function build(sources, target_name, opts)
   local ft = vim.bo.filetype
   if ft ~= "c" and ft ~= "cpp" then
     notify_warn("仅支持 c/cpp 文件")
@@ -182,29 +208,33 @@ local function build(sources, target_name)
     notify_warn("未找到源码文件")
     return
   end
-  local name = target_name or default_out_name(sources)
-  local exe = resolve_out_path(sources, name)
-  local cmd = build_cmd(ft, sources, exe)
-  if not cmd then
-    notify_err("未找到可用编译器，请检查 PATH 或在 setup 中自定义 compile 命令")
-    return
-  end
-  local ok = vim.fn.jobstart(cmd, {
-    stdout_buffered = true,
-    stderr_buffered = true,
-    detach = false,
-    on_stderr = function(_, d)
-      if d and #d > 0 then notify_warn(table.concat(d, "\n")) end
-    end,
-    on_exit = function(_, code)
-      if code == 0 then
-        notify_info("Build OK -> " .. exe)
-      else
-        notify_err("Build failed (" .. code .. ")")
-      end
-    end,
-  })
-  if ok <= 0 then notify_err("启动编译进程失败") end
+  opts = opts or {}
+  get_output_name_async(sources, target_name, function(name)
+    local exe = resolve_out_path(sources, name)
+    local cmd = build_cmd(ft, sources, exe)
+    if not cmd then
+      notify_err("未找到可用编译器，请检查 PATH 或在 setup 中自定义 compile 命令")
+      if opts.on_exit then pcall(opts.on_exit, 1, nil) end
+      return
+    end
+    local ok = vim.fn.jobstart(cmd, {
+      stdout_buffered = true,
+      stderr_buffered = true,
+      detach = false,
+      on_stderr = function(_, d)
+        if d and #d > 0 then notify_warn(table.concat(d, "\n")) end
+      end,
+      on_exit = function(_, code)
+        if code == 0 then
+          notify_info("Build OK -> " .. exe)
+        else
+          notify_err("Build failed (" .. code .. ")")
+        end
+        if opts.on_exit then pcall(opts.on_exit, code, exe) end
+      end,
+    })
+    if ok <= 0 then notify_err("启动编译进程失败") end
+  end)
 end
 
 local function run(exe)
@@ -232,8 +262,14 @@ local function run(exe)
 end
 
 local function build_and_run()
-  build()
-  vim.defer_fn(function() run() end, 200)
+  build(nil, nil, {
+    on_exit = function(code, exe)
+      if code == 0 then
+        -- 构建成功后再运行，避免竞态
+        run(exe)
+      end
+    end,
+  })
 end
 
 local function debug_run(exe)

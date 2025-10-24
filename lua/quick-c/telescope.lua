@@ -47,20 +47,11 @@ function M.telescope_make(config,
         sorter = conf.generic_sorter({}),
         previewer = (function()
           local previewers = require('telescope.previewers')
-          local uv = vim.loop
-          local names = { 'Makefile', 'makefile', 'GNUmakefile' }
-          local function find_makefile(dir)
-            for _, n in ipairs(names) do
-              local p = dir .. '/' .. n
-              local st = uv.fs_stat(p)
-              if st and st.type == 'file' then return p end
-            end
-            return nil
-          end
           return previewers.vim_buffer_cat.new({
             get_path = function()
-              local p = find_makefile(cwd)
-              return p or ''
+              local cur = vim.api.nvim_buf_get_name(0)
+              if cur and cur ~= '' then return cur end
+              return ''
             end,
           })
         end)(),

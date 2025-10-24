@@ -210,6 +210,109 @@ local function run_in_betterterm(cmd)
   return true
 end
 
+-- Make/Telescope helpers
+local function run_make_in_terminal(cmdline)
+  if not run_in_betterterm(cmdline) then
+    if not run_in_native_terminal(cmdline) then
+      notify_err("无法运行 make：无法打开终端")
+    end
+  end
+end
+
+local function shell_quote_path(p)
+  if is_windows() then
+    if is_powershell() then
+      return string.format("'%s'", p)
+    else
+      return string.format('"%s"', p)
+    end
+  else
+    return string.format("'%s'", p)
+  end
+end
+
+local function parse_make_targets_async(cb)
+  local prog = choose_make()
+  if not prog then cb({}) return end
+  local cwd = (M.config.make and M.config.make.cwd) or vim.fn.fnamemodify(vim.fn.expand("%:p"), ":h")
+  local lines = {}
+  local job = vim.fn.jobstart({ prog, "-qp" }, {
+    cwd = cwd,
+    stdout_buffered = true,
+    on_stdout = function(_, data)
+      if data then for _, l in ipairs(data) do table.insert(lines, l) end end
+    end,
+    on_exit = function()
+      local targets, seen = {}, {}
+      for _, l in ipairs(lines) do
+        local name = l:match("^([%w%._%-%+/][^:%$#=]*)%s*:")
+        if name then
+          name = name:gsub("%s+$", "")
+          if not name:match("%%%") and not name:match("^%.") and name ~= "Makefile" and name ~= "makefile" then
+            if not seen[name] then seen[name] = true; table.insert(targets, name) end
+          end
+        end
+      end
+      table.sort(targets)
+      cb(targets)
+    end,
+  })
+  if job <= 0 then cb({}) end
+end
+
+local function make_run_target(target)
+  local prog = choose_make()
+  if not prog then
+    notify_err("未找到 make 或 mingw32-make")
+    return
+  end
+  local cwd = (M.config.make and M.config.make.cwd) or vim.fn.fnamemodify(vim.fn.expand("%:p"), ":h")
+  local cmd = string.format("%s -C %s %s", prog, shell_quote_path(cwd), target or "")
+  run_make_in_terminal(cmd)
+end
+
+local function telescope_make()
+  if not (M.config.make and M.config.make.enabled ~= false) then
+    notify_warn("Make 功能未启用")
+    return
+  end
+  local ok_t = pcall(require, 'telescope')
+  if not ok_t then
+    notify_err("未找到 telescope.nvim")
+    return
+  end
+  local pickers = require('telescope.pickers')
+  local finders = require('telescope.finders')
+  local conf = require('telescope.config').values
+  parse_make_targets_async(function(targets)
+    if #targets == 0 then
+      notify_warn("未解析到任何 make 目标")
+      return
+    end
+    local title = (M.config.make.telescope and M.config.make.telescope.prompt_title) or "Make Targets"
+    pickers.new({}, {
+      prompt_title = title,
+      finder = finders.new_table({ results = targets }),
+      sorter = conf.generic_sorter({}),
+      attach_mappings = function(_, map)
+        local actions = require('telescope.actions')
+        local action_state = require('telescope.actions.state')
+        map('i', '<CR>', function(bufnr)
+          local entry = action_state.get_selected_entry()
+          actions.close(bufnr)
+          make_run_target(entry[1])
+        end)
+        map('n', '<CR>', function(bufnr)
+          local entry = action_state.get_selected_entry()
+          actions.close(bufnr)
+          make_run_target(entry[1])
+        end)
+        return true
+      end,
+    }):find()
+  end)
+end
+
 local function build(sources, target_name, opts)
   local ft = vim.bo.filetype
   if ft ~= "c" and ft ~= "cpp" then

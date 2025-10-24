@@ -59,15 +59,19 @@ function M.telescope_make(config,
             end
             return nil
           end
+          local fixed_path = find_makefile(cwd)
+          local loaded = false
           return previewers.new_buffer_previewer({
             define_preview = function(self)
-              local path = find_makefile(cwd)
-              if not path or path == '' then
+              if loaded then return end
+              if not fixed_path or fixed_path == '' then
                 vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, { '[No Makefile found]' })
+                loaded = true
                 return
               end
-              conf_t.buffer_previewer_maker(path, self.state.bufnr, { bufname = self.state.bufname })
+              conf_t.buffer_previewer_maker(fixed_path, self.state.bufnr, { bufname = self.state.bufname })
               pcall(vim.api.nvim_buf_set_option, self.state.bufnr, 'filetype', 'make')
+              loaded = true
             end,
           })
         end)(),

@@ -657,6 +657,17 @@ local function make_run_target(target)
   end)
 end
 
+-- 已知 cwd 时，直接运行目标，避免再次弹出目录选择
+local function make_run_in_cwd(target, cwd)
+  local prog = choose_make()
+  if not prog then
+    notify_err("未找到 make 或 mingw32-make")
+    return
+  end
+  local cmd = string.format("%s -C %s %s", prog, shell_quote_path(cwd), target or "")
+  run_make_in_terminal(cmd)
+end
+
 local function telescope_make()
   if not (M.config.make and M.config.make.enabled ~= false) then
     notify_warn("Make 功能未启用")
@@ -703,7 +714,7 @@ local function telescope_make()
                 end)
               end
             else
-              make_run_target(val)
+              make_run_in_cwd(val, cwd)
             end
           end
           map('i', '<CR>', choose)

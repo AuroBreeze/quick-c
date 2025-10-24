@@ -7,7 +7,7 @@ function K.setup(config, callbacks)
   if km.enabled == false then return end
   local function map(lhs, rhs, desc)
     if type(lhs) == 'string' and lhs ~= '' and rhs then
-      vim.keymap.set('n', lhs, rhs, { desc = desc })
+      pcall(vim.keymap.set, 'n', lhs, rhs, { desc = desc, unique = true })
     end
   end
   map(km.build, callbacks.build, "Quick-c: Compile current C/C++ file")

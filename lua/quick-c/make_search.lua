@@ -194,6 +194,25 @@ function M.resolve_make_cwd_async(config, start_dir, cb)
         end,
       }),
       sorter = conf.generic_sorter({}),
+      previewer = (function()
+        local previewers = require('telescope.previewers')
+        local uv = vim.loop
+        local names = { 'Makefile', 'makefile', 'GNUmakefile' }
+        local function find_makefile(dir)
+          for _, n in ipairs(names) do
+            local p = U.join(dir, n)
+            local st = uv.fs_stat(p)
+            if st and st.type == 'file' then return p end
+          end
+          return nil
+        end
+        return previewers.vim_buffer_cat.new({
+          get_path = function(entry)
+            local p = find_makefile(entry.value)
+            return p or ''
+          end,
+        })
+      end)(),
       attach_mappings = function(_, map)
         local actions = require('telescope.actions')
         local action_state = require('telescope.actions.state')

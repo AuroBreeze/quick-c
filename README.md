@@ -99,6 +99,14 @@ require("quick-c").setup({
     cwd = nil,    -- 默认使用当前文件所在目录
     telescope = { prompt_title = "Quick-c Make Targets" },
   },
+  keymaps = {
+    enabled = true,         -- 设为 false 可不注入任何默认键位
+    build = '<leader>cb',   -- 置为 nil 或 '' 可单独禁用某个映射
+    run = '<leader>cr',
+    build_and_run = '<leader>cR',
+    debug = '<leader>cD',
+    make = '<leader>cm',
+  },
 })
 ```
 
@@ -131,6 +139,8 @@ require("quick-c").setup({
 - `<leader>cR` → 构建并运行
 - `<leader>cD` → 调试
 - `<leader>cm` → 打开 Make 目标选择器（Telescope）
+
+提示：以上键位均可通过 `setup({ keymaps = { ... } })` 自定义或禁用。
 
 ## Windows 注意事项
 

@@ -20,6 +20,7 @@
   - `:QuickCAutoRunToggle`（保存时自动构建并运行的开关）
   - `:QuickCMake`、`:QuickCMakeRun [target]`
   - 默认快捷键：`<leader>cb`、`<leader>cr`、`<leader>cR`、`<leader>cD`、`<leader>cm`
+  - 键位可配置/禁用：通过 `setup({ keymaps = { ... } })` 自定义（设为 `nil`/`''` 可单独禁用；`enabled=false` 可全部禁用）
 
 ### 变更
 

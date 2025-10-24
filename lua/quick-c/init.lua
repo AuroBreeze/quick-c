@@ -48,6 +48,14 @@ M.config = {
     cwd = nil,    -- 默认使用当前文件所在目录
     telescope = { prompt_title = "Quick-c Make Targets" },
   },
+  keymaps = {
+    enabled = true,
+    build = "<leader>cb",
+    run = "<leader>cr",
+    build_and_run = "<leader>cR",
+    debug = "<leader>cD",
+    make = "<leader>cm",
+  },
 }
 
 local function is_windows()
@@ -463,11 +471,22 @@ function M.setup(opts)
     vim.notify("Quick-c: autorun " .. (M.config.autorun.enabled and "enabled" or "disabled"))
   end, {})
 
-  vim.keymap.set("n", "<leader>cb", build, { desc = "Quick-c: Compile current C/C++ file" })
-  vim.keymap.set("n", "<leader>cr", run, { desc = "Quick-c: Run current C/C++ exe" })
-  vim.keymap.set("n", "<leader>cR", build_and_run, { desc = "Quick-c: Build & Run current C/C++" })
-  vim.keymap.set("n", "<leader>cD", debug_run, { desc = "Quick-c: Debug current C/C++ exe" })
-  vim.keymap.set("n", "<leader>cm", telescope_make, { desc = "Quick-c: Make targets (Telescope)" })
+  local function setup_keymaps()
+    local km = M.config.keymaps or {}
+    if km.enabled == false then return end
+    local function map(lhs, rhs, desc)
+      if type(lhs) == 'string' and lhs ~= '' and rhs then
+        vim.keymap.set('n', lhs, rhs, { desc = desc })
+      end
+    end
+    map(km.build, build, "Quick-c: Compile current C/C++ file")
+    map(km.run, run, "Quick-c: Run current C/C++ exe")
+    map(km.build_and_run, build_and_run, "Quick-c: Build & Run current C/C++")
+    map(km.debug, debug_run, "Quick-c: Debug current C/C++ exe")
+    map(km.make, telescope_make, "Quick-c: Make targets (Telescope)")
+  end
+
+  setup_keymaps()
 end
 
 return M

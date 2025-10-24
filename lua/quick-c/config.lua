@@ -61,7 +61,7 @@ C.defaults = {
     run = "<leader>cr",
     build_and_run = "<leader>cR",
     debug = "<leader>cD",
-    make = "<leader>cm",
+    make = "<leader>cM",
   },
 }
 

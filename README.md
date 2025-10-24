@@ -4,7 +4,7 @@
 	<img src="https://dotfyle.com/plugins/AuroBreeze/quick-py/shield?style=for-the-badge" />
 </a>
 
-一个面向 C/C++ 的轻量 Neovim 插件：一键编译、运行与调试当前文件，支持 Windows、Linux、macOS，兼容 betterTerm 与内置终端，并可选自动保存后构建运行。构建与运行全程异步，不会阻塞 Neovim 主线程。
+一个面向 C/C++ 的轻量 Neovim 插件：一键编译、运行与调试当前文件，支持 Windows、Linux、macOS，兼容 betterTerm 与内置终端。构建与运行全程异步，不会阻塞 Neovim 主线程。
 
 ## 特性
 
@@ -13,7 +13,7 @@
 - **跨平台**：自动选择可用编译器（gcc/clang/cl）与合适运行方式（PowerShell/终端）
 - **灵活输出位置**：默认将可执行文件输出到源码所在目录；可通过配置修改
 - **终端兼容**：优先将命令发送到 `betterTerm`（如已安装），否则使用 Neovim 内置终端
-- **自动运行**：可选保存后自动构建并运行（按文件类型过滤）
+ 
 - **Make 集成（异步）**：自动解析 `make -qp` 目标，Telescope 选择执行（如 `clean`、`install`）
 - **便捷快捷键**：默认提供 `<leader>cb`、`<leader>cr`、`<leader>cR`、`<leader>cD`、`<leader>cm`
 
@@ -125,14 +125,7 @@ use({
         windows = { c = { "gcc", "cl" }, cpp = { "g++", "cl" } },
         unix    = { c = { "gcc", "clang" }, cpp = { "g++", "clang++" } },
       },
-      autorun = {
-        -- 保存即运行功能（默认关闭）
-        enabled = false,
-        -- 触发自动运行的事件
-        events = { "BufWritePost" },
-        -- 仅对这些文件类型生效
-        filetypes = { "c", "cpp" },
-      },
+      
       terminal = {
         -- 运行时是否自动打开内置终端窗口
         open = true,
@@ -279,7 +272,7 @@ require("quick-c").setup({
   - `lua/quick-c/make.lua` 选择 make/解析目标/在 cwd 执行
   - `lua/quick-c/telescope.lua` Telescope 交互（目录与目标、自定义参数）
   - `lua/quick-c/build.lua` 构建/运行/调试
-  - `lua/quick-c/autorun.lua` 保存即运行
+  
   - `lua/quick-c/keys.lua` 键位注入
 
 - 行为保持不变：
@@ -295,11 +288,7 @@ require("quick-c").setup({
 - 需要安装并配置 `nvim-dap` 与 `codelldb`
 - `:QuickCDebug` 会以 `codelldb` 方案启动，`program` 指向最近一次构建输出
 
-## 自动运行（Autorun）
-
-- 通过 `setup({ autorun = { enabled = true, ... } })` 开启
-- 默认事件：`BufWritePost`，默认文件类型：`c`、`cpp`
-- 也可在运行中用 `:QuickCAutoRunToggle` 动态开关
+ 
 
 ## 故障排查
 

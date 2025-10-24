@@ -117,9 +117,6 @@ function M.setup(opts)
     make_run_target(target)
   end, { nargs = "*" })
 
-  -- autorun (build & run on save)
-  require('quick-c.autorun').setup(M.config, function() build_and_run() end)
-
   require('quick-c.keys').setup(M.config, {
     build = build,
     run = run,

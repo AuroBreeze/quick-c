@@ -61,7 +61,7 @@
   -- 3) 命令触发（调用命令时加载，等同“命令提前加载”）
   cmd = {
     "QuickCBuild", "QuickCRun", "QuickCBR", "QuickCDebug",
-    "QuickCMake", "QuickCMakeRun", "QuickCAutoRunToggle",
+    "QuickCMake", "QuickCMakeRun",
   },
   config = function()
     require("quick-c").setup()
@@ -90,7 +90,7 @@ use({
 - 运行可执行文件：`:QuickCRun` 或 `<leader>cr`
 - 构建并运行：`:QuickCBR` 或 `<leader>cR`
 - 调试运行：`:QuickCDebug` 或 `<leader>cD`
-- 切换保存即运行：`:QuickCAutoRunToggle`
+ 
 
 默认输出名为当前文件名（Windows 会追加 `.exe`）；如需自定义输出名，构建时可在提示中输入。
 
@@ -112,7 +112,7 @@ use({
   },
   cmd = {
     "QuickCBuild", "QuickCRun", "QuickCBR", "QuickCDebug",
-    "QuickCMake", "QuickCMakeRun", "QuickCAutoRunToggle",
+    "QuickCMake", "QuickCMakeRun",
   },
   config = function()
     require("quick-c").setup({
@@ -224,7 +224,7 @@ require("quick-c").setup({
 - `:QuickCRun` 运行当前文件对应的可执行文件
 - `:QuickCBR` 构建并运行
 - `:QuickCDebug` 使用 `nvim-dap` 以 `codelldb` 调试可执行文件
-- `:QuickCAutoRunToggle` 切换保存即运行（受 `autorun.filetypes` 限制）
+ 
 - `:QuickCMake` 打开 Telescope 选择器列出可用 make 目标
 - `:QuickCMakeRun [target]` 直接运行指定 make 目标
 

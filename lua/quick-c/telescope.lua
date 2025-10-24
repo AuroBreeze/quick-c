@@ -1,4 +1,5 @@
 local M = {}
+local U = require('quick-c.util')
 
 -- Telescope picker for make: select cwd (resolved outside) -> list targets -> run
 -- External dependencies are injected to avoid circular requires.
@@ -47,11 +48,26 @@ function M.telescope_make(config,
         sorter = conf.generic_sorter({}),
         previewer = (function()
           local previewers = require('telescope.previewers')
-          return previewers.vim_buffer_cat.new({
-            get_path = function()
-              local cur = vim.api.nvim_buf_get_name(0)
-              if cur and cur ~= '' then return cur end
-              return ''
+          local conf_t = require('telescope.config').values
+          local uv = vim.loop
+          local names = { 'Makefile', 'makefile', 'GNUmakefile' }
+          local function find_makefile(dir)
+            for _, n in ipairs(names) do
+              local p = U.join(dir, n)
+              local st = uv.fs_stat(p)
+              if st and st.type == 'file' then return p end
+            end
+            return nil
+          end
+          return previewers.new_buffer_previewer({
+            define_preview = function(self)
+              local path = find_makefile(cwd)
+              if not path or path == '' then
+                vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, { '[No Makefile found]' })
+                return
+              end
+              conf_t.buffer_previewer_maker(path, self.state.bufnr, { bufname = self.state.bufname })
+              pcall(vim.api.nvim_buf_set_option, self.state.bufnr, 'filetype', 'make')
             end,
           })
         end)(),

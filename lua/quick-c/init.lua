@@ -46,12 +46,209 @@ M.config = {
     enabled = true,
     prefer = nil, -- e.g. "make" | "mingw32-make"
     cwd = nil,    -- 默认使用当前文件所在目录
+    search = { up = 2, down = 3, ignore_dirs = { '.git', 'node_modules', '.cache' } },
     telescope = { prompt_title = "Quick-c Make Targets" },
+  },
+  keymaps = {
+    enabled = true,
+    build = "<leader>cb",
+    run = "<leader>cr",
+    build_and_run = "<leader>cR",
+    debug = "<leader>cD",
+    make = "<leader>cm",
   },
 }
 
 local function is_windows()
   return vim.fn.has("win32") == 1
+end
+
+-- 异步非阻塞 Makefile 搜索：分批扫描目录，避免卡主线程
+local function find_make_root_async(start_dir, cb)
+  local cfg = M.config.make or {}
+  local up = (cfg.search and cfg.search.up) or 2
+  local down = (cfg.search and cfg.search.down) or 3
+  local ignore = (cfg.search and cfg.search.ignore_dirs) or { '.git', 'node_modules', '.cache' }
+  local names = { 'Makefile', 'makefile', 'GNUmakefile' }
+  local uv = vim.loop
+
+  local function join(a, b)
+    if a:sub(-1) == '/' or a:sub(-1) == '\\' then return a .. b end
+    local sep = is_windows() and '\\' or '/'
+    return a .. sep .. b
+  end
+  local function norm(p)
+    p = vim.fn.fnamemodify(p, ':p')
+    if is_windows() then p = p:gsub('\\', '/'):lower() else p = p:gsub('//+', '/') end
+    if p:sub(-1) == '/' then p = p:sub(1, -2) end
+    return p
+  end
+  local function is_ignored(name)
+    for _, n in ipairs(ignore) do if name == n then return true end end
+    return false
+  end
+  local function has_makefile(dir)
+    for _, n in ipairs(names) do
+      local st = uv.fs_stat(join(dir, n))
+      if st and st.type == 'file' then return true end
+    end
+    return false
+  end
+  local function parent(dir)
+    local p = vim.fn.fnamemodify(dir, ':h')
+    if p == nil or p == '' then return dir end
+    return p
+  end
+
+  local cwd_root = norm(vim.fn.getcwd())
+
+  -- 预生成向上各层起点（受工作目录边界限制）
+  local bases = {}
+  do
+    local cur = start_dir
+    for _ = 0, up do
+      local cur_norm = norm(cur)
+      if not cur_norm:find(cwd_root, 1, true) then break end
+      table.insert(bases, cur)
+      local nextp = parent(cur)
+      if nextp == cur then break end
+      local next_norm = norm(nextp)
+      if #next_norm < #cwd_root or not next_norm:find(cwd_root, 1, true) then break end
+      cur = nextp
+    end
+  end
+
+  -- BFS 队列：每个元素为 { dir, depth }
+  local queue = {}
+  for _, b in ipairs(bases) do table.insert(queue, { dir = b, depth = 0 }) end
+
+  local scanning = false
+  local found = false
+  local batch_size = 40 -- 每 tick 处理的目录数
+
+  local function step()
+    if scanning then return end
+    if found then return end
+    scanning = true
+    local processed = 0
+    while processed < batch_size and #queue > 0 do
+      local item = table.remove(queue, 1)
+      local dir, depth = item.dir, item.depth
+      -- 命中判断
+      if has_makefile(dir) then
+        found = true
+        scanning = false
+        cb(dir)
+        return
+      end
+      if depth < down then
+        local req = uv.fs_scandir(dir)
+        if req then
+          while true do
+            local name, t = uv.fs_scandir_next(req)
+            if not name then break end
+            if t == 'directory' and not is_ignored(name) then
+              table.insert(queue, { dir = join(dir, name), depth = depth + 1 })
+            end
+          end
+        end
+      end
+      processed = processed + 1
+    end
+    scanning = false
+    if not found then
+      if #queue == 0 then
+        -- 未找到，回退为 start_dir
+        cb(start_dir)
+      else
+        vim.defer_fn(step, 1) -- 让出主线程，下一个 tick 继续
+      end
+    end
+  end
+
+  step()
+end
+
+-- Makefile 搜索：向上 up 层，向下 down 层，返回含有 Makefile 的目录
+-- 同步版本（保留备用，不再直接在热路径使用）
+local function find_make_root(start_dir)
+  local cfg = M.config.make or {}
+  local up = (cfg.search and cfg.search.up) or 2
+  local down = (cfg.search and cfg.search.down) or 3
+  local ignore = (cfg.search and cfg.search.ignore_dirs) or { '.git', 'node_modules', '.cache' }
+  local names = { 'Makefile', 'makefile', 'GNUmakefile' }
+  local uv = vim.loop
+
+  local function join(a, b)
+    if a:sub(-1) == '/' or a:sub(-1) == '\\' then return a .. b end
+    local sep = is_windows() and '\\' or '/'
+    return a .. sep .. b
+  end
+
+  local function norm(p)
+    p = vim.fn.fnamemodify(p, ':p')
+    if is_windows() then
+      p = p:gsub('\\', '/'):lower()
+    else
+      p = p:gsub('//+', '/')
+    end
+    if p:sub(-1) == '/' then p = p:sub(1, -2) end
+    return p
+  end
+
+  local function is_ignored(name)
+    for _, n in ipairs(ignore) do if name == n then return true end end
+    return false
+  end
+
+  local function has_makefile(dir)
+    for _, n in ipairs(names) do
+      local p = join(dir, n)
+      local st = uv.fs_stat(p)
+      if st and st.type == 'file' then return dir end
+    end
+    return nil
+  end
+
+  local function scan_down(dir, depth)
+    local found = has_makefile(dir)
+    if found then return found end
+    if depth <= 0 then return nil end
+    local req, iter = uv.fs_scandir(dir)
+    if not req then return nil end
+    while true do
+      local name, t = uv.fs_scandir_next(req)
+      if not name then break end
+      if t == 'directory' and not is_ignored(name) then
+        local sub = join(dir, name)
+        local r = scan_down(sub, depth - 1)
+        if r then return r end
+      end
+    end
+    return nil
+  end
+
+  local function parent(dir)
+    local p = vim.fn.fnamemodify(dir, ':h')
+    if p == nil or p == '' then return dir end
+    return p
+  end
+
+  local cur = start_dir
+  local cwd_root = norm(vim.fn.getcwd())
+  for i = 0, up do
+    local cur_norm = norm(cur)
+    if not cur_norm:find(cwd_root, 1, true) then break end
+    local base = cur
+    local r = scan_down(base, down)
+    if r then return r end
+    local nextp = parent(cur)
+    if nextp == cur then break end
+    local next_norm = norm(nextp)
+    if #next_norm < #cwd_root or not next_norm:find(cwd_root, 1, true) then break end
+    cur = nextp
+  end
+  return start_dir
 end
 
 local function choose_make()
@@ -210,6 +407,325 @@ local function run_in_betterterm(cmd)
   return true
 end
 
+-- Make/Telescope helpers
+local function run_make_in_terminal(cmdline)
+  if not run_in_betterterm(cmdline) then
+    if not run_in_native_terminal(cmdline) then
+      notify_err("无法运行 make：无法打开终端")
+    end
+  end
+end
+
+local function shell_quote_path(p)
+  if is_windows() then
+    if is_powershell() then
+      return string.format("'%s'", p)
+    else
+      return string.format('"%s"', p)
+    end
+  else
+    return string.format("'%s'", p)
+  end
+end
+
+local function parse_make_targets_async(cb)
+  local prog = choose_make()
+  if not prog then cb({}) return end
+  local base = (M.config.make and M.config.make.cwd) or vim.fn.fnamemodify(vim.fn.expand("%:p"), ":h")
+  if M.config.make and M.config.make.cwd then
+    local cwd = base
+    local lines = {}
+    local job = vim.fn.jobstart({ prog, "-qp" }, {
+      cwd = cwd,
+      stdout_buffered = true,
+      on_stdout = function(_, data)
+        if data then for _, l in ipairs(data) do table.insert(lines, l) end end
+      end,
+      on_exit = function()
+        local targets, seen = {}, {}
+        for _, l in ipairs(lines) do
+          local name = l:match("^([%w%._%-%+/][^:%$#=]*)%s*:")
+          if name then
+            name = name:gsub("%s+$", "")
+            if not name:match("%%%") and not name:match("^%.") and name ~= "Makefile" and name ~= "makefile" then
+              if not seen[name] then seen[name] = true; table.insert(targets, name) end
+            end
+          end
+        end
+        table.sort(targets)
+        cb(targets)
+      end,
+    })
+    if job <= 0 then cb({}) end
+  else
+    find_make_root_async(base, function(cwd)
+      local lines = {}
+      local job = vim.fn.jobstart({ prog, "-qp" }, {
+        cwd = cwd,
+        stdout_buffered = true,
+        on_stdout = function(_, data)
+          if data then for _, l in ipairs(data) do table.insert(lines, l) end end
+        end,
+        on_exit = function()
+          local targets, seen = {}, {}
+          for _, l in ipairs(lines) do
+            local name = l:match("^([%w%._%-%+/][^:%$#=]*)%s*:")
+            if name then
+              name = name:gsub("%s+$", "")
+              if not name:match("%%%") and not name:match("^%.") and name ~= "Makefile" and name ~= "makefile" then
+                if not seen[name] then seen[name] = true; table.insert(targets, name) end
+              end
+            end
+          end
+          table.sort(targets)
+          cb(targets, cwd)
+        end,
+      })
+      if job <= 0 then cb({}, cwd) end
+    end)
+  end
+end
+
+-- 收集多个 Makefile 目录（异步，非阻塞）
+local function find_make_roots_async(start_dir, cb)
+  local results, seen = {}, {}
+  find_make_root_async(start_dir, function(first)
+    -- 先把首个结果加入，再继续全量扫描（基于同一 BFS 逻辑：这里简单复用 find_make_root_async 的扫描实现不便，改为轻量级重扫）
+    -- 为简化与避免复制大量代码，这里直接在同一策略下进行再次扫描，累计所有命中。
+    local cfg = M.config.make or {}
+    local up = (cfg.search and cfg.search.up) or 2
+    local down = (cfg.search and cfg.search.down) or 3
+    local ignore = (cfg.search and cfg.search.ignore_dirs) or { '.git', 'node_modules', '.cache' }
+    local names = { 'Makefile', 'makefile', 'GNUmakefile' }
+    local uv = vim.loop
+    local function join(a, b)
+      if a:sub(-1) == '/' or a:sub(-1) == '\\' then return a .. b end
+      local sep = is_windows() and '\\' or '/'
+      return a .. sep .. b
+    end
+    local function has_makefile(dir)
+      for _, n in ipairs(names) do
+        local st = uv.fs_stat(join(dir, n))
+        if st and st.type == 'file' then return true end
+      end
+      return false
+    end
+    local function parent(dir)
+      local p = vim.fn.fnamemodify(dir, ':h')
+      if p == nil or p == '' then return dir end
+      return p
+    end
+    local function norm(p)
+      p = vim.fn.fnamemodify(p, ':p')
+      if is_windows() then p = p:gsub('\\', '/'):lower() else p = p:gsub('//+', '/') end
+      if p:sub(-1) == '/' then p = p:sub(1, -2) end
+      return p
+    end
+    local cwd_root = norm(vim.fn.getcwd())
+    local bases = {}
+    do
+      local cur = start_dir
+      for _ = 0, up do
+        local cur_norm = norm(cur)
+        if not cur_norm:find(cwd_root, 1, true) then break end
+        table.insert(bases, cur)
+        local nextp = parent(cur)
+        if nextp == cur then break end
+        local next_norm = norm(nextp)
+        if #next_norm < #cwd_root or not next_norm:find(cwd_root, 1, true) then break end
+        cur = nextp
+      end
+    end
+    local queue = {}
+    for _, b in ipairs(bases) do table.insert(queue, { dir = b, depth = 0 }) end
+    local batch_size = 50
+    local function step()
+      local processed = 0
+      while processed < batch_size and #queue > 0 do
+        local item = table.remove(queue, 1)
+        local dir, depth = item.dir, item.depth
+        if has_makefile(dir) and not seen[dir] then
+          seen[dir] = true
+          table.insert(results, dir)
+        end
+        if depth < down then
+          local req = uv.fs_scandir(dir)
+          if req then
+            while true do
+              local name, t = uv.fs_scandir_next(req)
+              if not name then break end
+              if t == 'directory' and name ~= '.git' and name ~= 'node_modules' and name ~= '.cache' then
+                table.insert(queue, { dir = join(dir, name), depth = depth + 1 })
+              end
+            end
+          end
+        end
+        processed = processed + 1
+      end
+      if #queue > 0 then
+        vim.defer_fn(step, 1)
+      else
+        table.sort(results)
+        cb(results)
+      end
+    end
+    step()
+  end)
+end
+
+local function resolve_make_cwd_async(base, cb)
+  if M.config.make and M.config.make.cwd then cb(M.config.make.cwd) return end
+  local ok_t = pcall(require, 'telescope')
+  find_make_roots_async(base, function(roots)
+    if #roots == 0 then cb(base) return end
+    if #roots == 1 or not ok_t then cb(roots[1]) return end
+    local pickers = require('telescope.pickers')
+    local finders = require('telescope.finders')
+    local conf = require('telescope.config').values
+    local cwd = vim.fn.getcwd()
+    local entries = {}
+    for _, d in ipairs(roots) do
+      local rel = vim.fn.fnamemodify(d, ':p')
+      if rel:sub(1, #cwd) == cwd then
+        rel = '.' .. rel:sub(#cwd + 1)
+      end
+      table.insert(entries, { display = rel, path = d })
+    end
+    pickers.new({}, {
+      prompt_title = 'Select Makefile Directory',
+      finder = finders.new_table({
+        results = entries,
+        entry_maker = function(e)
+          return { value = e.path, display = e.display, ordinal = e.display }
+        end,
+      }),
+      sorter = conf.generic_sorter({}),
+      attach_mappings = function(_, map)
+        local actions = require('telescope.actions')
+        local action_state = require('telescope.actions.state')
+        local function choose(bufnr)
+          local entry = action_state.get_selected_entry()
+          actions.close(bufnr)
+          cb(entry.value)
+        end
+        map('i', '<CR>', choose)
+        map('n', '<CR>', choose)
+        return true
+      end,
+    }):find()
+  end)
+end
+
+local function parse_make_targets_in_cwd_async(cwd, cb)
+  local prog = choose_make()
+  if not prog then cb({}) return end
+  local lines = {}
+  local job = vim.fn.jobstart({ prog, "-qp" }, {
+    cwd = cwd,
+    stdout_buffered = true,
+    on_stdout = function(_, data)
+      if data then for _, l in ipairs(data) do table.insert(lines, l) end end
+    end,
+    on_exit = function()
+      local targets, seen = {}, {}
+      for _, l in ipairs(lines) do
+        local name = l:match("^([%w%._%-%+/][^:%$#=]*)%s*:")
+        if name then
+          name = name:gsub("%s+$", "")
+          if not name:match("%%%") and not name:match("^%.") and name ~= "Makefile" and name ~= "makefile" then
+            if not seen[name] then seen[name] = true; table.insert(targets, name) end
+          end
+        end
+      end
+      table.sort(targets)
+      cb(targets)
+    end,
+  })
+  if job <= 0 then cb({}) end
+end
+
+local function make_run_target(target)
+  local prog = choose_make()
+  if not prog then
+    notify_err("未找到 make 或 mingw32-make")
+    return
+  end
+  local base = (M.config.make and M.config.make.cwd) or vim.fn.fnamemodify(vim.fn.expand("%:p"), ":h")
+  resolve_make_cwd_async(base, function(cwd)
+    local cmd = string.format("%s -C %s %s", prog, shell_quote_path(cwd), target or "")
+    run_make_in_terminal(cmd)
+  end)
+end
+
+-- 已知 cwd 时，直接运行目标，避免再次弹出目录选择
+local function make_run_in_cwd(target, cwd)
+  local prog = choose_make()
+  if not prog then
+    notify_err("未找到 make 或 mingw32-make")
+    return
+  end
+  local cmd = string.format("%s -C %s %s", prog, shell_quote_path(cwd), target or "")
+  run_make_in_terminal(cmd)
+end
+
+local function telescope_make()
+  if not (M.config.make and M.config.make.enabled ~= false) then
+    notify_warn("Make 功能未启用")
+    return
+  end
+  local ok_t = pcall(require, 'telescope')
+  if not ok_t then
+    notify_err("未找到 telescope.nvim")
+    return
+  end
+  local pickers = require('telescope.pickers')
+  local finders = require('telescope.finders')
+  local conf = require('telescope.config').values
+  local base = (M.config.make and M.config.make.cwd) or vim.fn.fnamemodify(vim.fn.expand('%:p'), ':h')
+  resolve_make_cwd_async(base, function(cwd)
+    parse_make_targets_in_cwd_async(cwd, function(targets)
+      if #targets == 0 then
+        notify_warn("未解析到任何 make 目标")
+        return
+      end
+      -- 附加自定义参数入口
+      local results = vim.list_extend({ '[自定义参数…]' }, targets)
+      local title = (M.config.make.telescope and M.config.make.telescope.prompt_title) or "Make Targets"
+      pickers.new({}, {
+        prompt_title = title .. ' (' .. cwd .. ')',
+        finder = finders.new_table({ results = results }),
+        sorter = conf.generic_sorter({}),
+        attach_mappings = function(_, map)
+          local actions = require('telescope.actions')
+          local action_state = require('telescope.actions.state')
+          local function choose(bufnr)
+            local entry = action_state.get_selected_entry()
+            actions.close(bufnr)
+            local val = entry[1]
+            if val == '[自定义参数…]' then
+              local ui = vim.ui or {}
+              if ui.input then
+                ui.input({ prompt = 'make 参数: ' }, function(args)
+                  if not args or args == '' then return end
+                  local prog = choose_make()
+                  if not prog then notify_err('未找到 make 或 mingw32-make'); return end
+                  local cmd = string.format("%s -C %s %s", prog, shell_quote_path(cwd), args)
+                  run_make_in_terminal(cmd)
+                end)
+              end
+            else
+              make_run_in_cwd(val, cwd)
+            end
+          end
+          map('i', '<CR>', choose)
+          map('n', '<CR>', choose)
+          return true
+        end,
+      }):find()
+    end)
+  end)
+end
+
 local function build(sources, target_name, opts)
   local ft = vim.bo.filetype
   if ft ~= "c" and ft ~= "cpp" then
@@ -360,11 +876,22 @@ function M.setup(opts)
     vim.notify("Quick-c: autorun " .. (M.config.autorun.enabled and "enabled" or "disabled"))
   end, {})
 
-  vim.keymap.set("n", "<leader>cb", build, { desc = "Quick-c: Compile current C/C++ file" })
-  vim.keymap.set("n", "<leader>cr", run, { desc = "Quick-c: Run current C/C++ exe" })
-  vim.keymap.set("n", "<leader>cR", build_and_run, { desc = "Quick-c: Build & Run current C/C++" })
-  vim.keymap.set("n", "<leader>cD", debug_run, { desc = "Quick-c: Debug current C/C++ exe" })
-  vim.keymap.set("n", "<leader>cm", telescope_make, { desc = "Quick-c: Make targets (Telescope)" })
+  local function setup_keymaps()
+    local km = M.config.keymaps or {}
+    if km.enabled == false then return end
+    local function map(lhs, rhs, desc)
+      if type(lhs) == 'string' and lhs ~= '' and rhs then
+        vim.keymap.set('n', lhs, rhs, { desc = desc })
+      end
+    end
+    map(km.build, build, "Quick-c: Compile current C/C++ file")
+    map(km.run, run, "Quick-c: Run current C/C++ exe")
+    map(km.build_and_run, build_and_run, "Quick-c: Build & Run current C/C++")
+    map(km.debug, debug_run, "Quick-c: Debug current C/C++ exe")
+    map(km.make, telescope_make, "Quick-c: Make targets (Telescope)")
+  end
+
+  setup_keymaps()
 end
 
 return M

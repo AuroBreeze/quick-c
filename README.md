@@ -17,6 +17,15 @@
 - **Make 集成（异步）**：自动解析 `make -qp` 目标，Telescope 选择执行（如 `clean`、`install`）
 - **便捷快捷键**：默认提供 `<leader>cb`、`<leader>cr`、`<leader>cR`、`<leader>cD`、`<leader>cm`
 
+### v1.1.0 更新摘要
+
+- Telescope 选择器内置 Makefile 预览（目录选择与目标选择均可见，目标选择阶段固定预览所选目录的 Makefile）。
+- 大文件与编码兼容：预览支持字节/行数截断，避免卡顿。
+- 终端发送可配置：`make.telescope.choose_terminal = 'auto'|'always'|'never'`。
+- 选择已有内置终端发送时，会自动打开/聚焦该终端窗口；默认策略仍为 betterTerm 优先、失败回退内置终端。
+- 键位注入采用 `unique=true`，不再覆盖用户已有映射。
+- Windows 路径处理更稳健（预览器使用安全拼接）。
+
 ## 依赖
 
 - Neovim 0.8+
@@ -68,47 +77,83 @@ use({
 
 ## 配置
 
-默认配置（摘自 `lua/quick-c/init.lua` 的 `M.config`）：
+默认配置（核心选项，完整见 `lua/quick-c/config.lua`）：
 
 ```lua
 require("quick-c").setup({
-  outdir = "source", -- 输出到源码目录；也可改为自定义目录
+  -- 可执行文件输出目录：
+  --  - "source": 输出在源码同目录
+  --  - 自定义路径：如 vim.fn.stdpath("data") .. "/quick-c-bin"
+  outdir = "source",
   toolchain = {
+    -- 编译器探测优先级（按平台与语言）
     windows = { c = { "gcc", "cl" }, cpp = { "g++", "cl" } },
-    unix = { c = { "gcc", "clang" }, cpp = { "g++", "clang++" } },
+    unix    = { c = { "gcc", "clang" }, cpp = { "g++", "clang++" } },
   },
   autorun = {
+    -- 保存即运行功能（默认关闭）
     enabled = false,
+    -- 触发自动运行的事件
     events = { "BufWritePost" },
+    -- 仅对这些文件类型生效
     filetypes = { "c", "cpp" },
   },
   terminal = {
+    -- 运行时是否自动打开内置终端窗口
     open = true,
+    -- 终端窗口高度
     height = 12,
   },
   betterterm = {
+    -- 安装了 betterTerm 时优先使用
     enabled = true,
+    -- 发送到的终端索引（0 为第一个）
     index = 0,
+    -- 发送命令的延时（毫秒）
     send_delay = 200,
+    -- 发送命令后是否聚焦终端
     focus_on_run = true,
+    -- 终端未打开时是否先打开
     open_if_closed = true,
   },
   make = {
+    -- 启用/禁用 make 集成
     enabled = true,
-    prefer = nil, -- Windows 可设 "mingw32-make"
-    cwd = nil,    -- 默认使用当前文件所在目录
-    -- Makefile 搜索：若未显式设置 cwd，则从当前文件目录开始
-    -- 向上最多 2 层、向下最多 3 层查找含 Makefile 的目录
+    -- 指定优先使用的 make 程序：
+    --   - Windows 可设 "make" 或 "mingw32-make"；未设置时按可执行探测
+    prefer = nil,
+    -- 固定工作目录（不设置则由插件根据当前文件自动搜索）
+    cwd = nil,
+    -- Makefile 搜索策略（未显式设置 cwd 时生效）：
+    --   以当前文件所在目录为起点，向上 up 层、向下每层 down 层，跳过 ignore_dirs
     search = { up = 2, down = 3, ignore_dirs = { '.git', 'node_modules', '.cache' } },
-    telescope = { prompt_title = "Quick-c Make Targets" },
+    telescope = {
+      -- Telescope 选择器标题
+      prompt_title = "Quick-c Make Targets",
+      -- 是否启用预览（目录选择与目标选择均支持）
+      preview = true,
+      -- 大文件截断策略（按字节与行数）
+      max_preview_bytes = 200 * 1024,
+      max_preview_lines = 2000,
+      -- 是否为预览 buffer 设置 filetype=make（语法高亮）
+      set_filetype = true,
+      -- 发送命令到终端时的选择行为：
+      --   'auto'  有已打开终端则弹选择器，否则走默认策略
+      --   'always'总是弹选择器
+      --   'never' 始终走默认策略（betterTerm 优先，失败回退内置）
+      choose_terminal = 'auto',
+    },
   },
   keymaps = {
-    enabled = true,         -- 设为 false 可不注入任何默认键位
-    build = '<leader>cb',   -- 置为 nil 或 '' 可单独禁用某个映射
+    -- 设为 false 可不注入任何默认键位（你可自行映射命令）
+    enabled = true,
+    -- 置为 nil 或 '' 可单独禁用某个映射
+    build = '<leader>cb',
     run = '<leader>cr',
     build_and_run = '<leader>cR',
     debug = '<leader>cD',
-    make = '<leader>cm',
+    -- 注意：键位注入使用 unique=true，不会覆盖你已有的映射；冲突时跳过
+    make = '<leader>cM',
   },
 })
 ```
@@ -143,7 +188,27 @@ require("quick-c").setup({
 - `<leader>cD` → 调试
 - `<leader>cm` → 打开 Make 目标选择器（Telescope）
 
-提示：以上键位均可通过 `setup({ keymaps = { ... } })` 自定义或禁用。
+提示：
+- 以上键位均可通过 `setup({ keymaps = { ... } })` 自定义或禁用。
+- 插件设置键位时使用 `unique=true`，不会覆盖你已有的映射；如键位已被占用会跳过注入。
+
+### Telescope 预览说明
+
+- 目录选择器与目标选择器均内置 Makefile 预览。
+- 目标选择器阶段，预览固定显示已选目录中的 Makefile，不随光标移动刷新（避免卡顿）。
+- 对大文件自动截断，受以下配置项控制：
+  - `make.telescope.preview`：是否启用预览。
+  - `make.telescope.max_preview_bytes`：超过该字节数则改为按行读取并截断。
+  - `make.telescope.max_preview_lines`：截断时最多显示的行数。
+  - `make.telescope.set_filetype`：是否设置预览 buffer 的 `filetype=make`。
+
+### 终端选择行为
+
+- 选择 make 目标后，可将命令发送到已打开的内置终端，或使用默认策略（betterTerm 优先，失败回退内置）。
+- 通过 `make.telescope.choose_terminal` 控制行为：
+  - `'auto'`：存在已打开终端时弹选择器，否则直接默认策略。
+  - `'always'`：总是弹出选择器。
+  - `'never'`：总是使用默认策略。
 
 ### Makefile 搜索说明
 
@@ -152,6 +217,25 @@ require("quick-c").setup({
   - 在每一层向下递归至多 `search.down` 层（默认 3 层）
   - 找到包含 `Makefile`/`makefile`/`GNUmakefile` 的首个目录作为工作目录
   - 会跳过 `ignore_dirs` 名单中的目录（默认：`.git`、`node_modules`、`.cache`）
+
+## 架构说明
+
+内部已模块化重构，但对外 API 不变：
+
+- 模块划分
+  - `lua/quick-c/init.lua` 装配、命令与键位注入
+  - `lua/quick-c/config.lua` 默认配置
+  - `lua/quick-c/util.lua` 工具函数（平台/路径/消息）
+  - `lua/quick-c/terminal.lua` 终端封装（betterTerm/内置）
+  - `lua/quick-c/make_search.lua` 异步 Makefile 搜索与目录选择
+  - `lua/quick-c/make.lua` 选择 make/解析目标/在 cwd 执行
+  - `lua/quick-c/telescope.lua` Telescope 交互（目录与目标、自定义参数）
+  - `lua/quick-c/build.lua` 构建/运行/调试
+  - `lua/quick-c/autorun.lua` 保存即运行
+  - `lua/quick-c/keys.lua` 键位注入
+
+- 行为保持不变：
+  - 键位可配置/禁用；多 Makefile 时目录先选后执行；选择后自动关闭选择器并在终端执行；全程异步不阻塞。
 
 ## Windows 注意事项
 

@@ -1,57 +1,43 @@
 # Quick-c Release Notes
 
-## v1.0.0 (2025-10-24)
-
-这是 Quick-c 的首个稳定版本，带来异步构建/运行、Make 适配与 Telescope 集成，以及更好的跨平台终端兼容性。
+## v1.1.0 (2025-10-24)
 
 ### 新增
+- Telescope 选择器内置 Makefile 预览：
+  - 目录选择与目标选择均可预览 Makefile。
+  - 目标选择阶段固定预览所选目录中的 Makefile，避免频繁刷新导致卡顿。
+- 大文件与编码兼容：预览支持按字节/行数截断，避免卡顿或解码异常。
+- 终端选择可配置：`make.telescope.choose_terminal = 'auto'|'always'|'never'`。
+  - 选择已打开的内置终端发送时，会自动打开/聚焦该终端窗口。
 
-- 异步构建/运行
-  - 构建进程通过 `jobstart` 异步执行，不阻塞 Neovim 主线程。
-  - 多源文件输出名使用 `vim.ui.input` 提示（非阻塞）。
-  - 提供回调：`build(nil, nil, { on_exit = function(code, exe) ... end })` 可扩展自定义行为。
-- Make 适配（可选）
-  - 自动检测 `make` 或 Windows 下的 `mingw32-make`。
-  - 通过 `make -qp` 异步解析目标（过滤伪目标与模式目标）。
-  - Telescope 集成：`:QuickCMake` 打开选择器，选择如 `clean`、`install` 等目标后执行。
-  - 直接运行：`:QuickCMakeRun [target]`。
-- 新命令与快捷键
-  - `:QuickCBuild`、`:QuickCRun`、`:QuickCBR`、`:QuickCDebug`
-  - `:QuickCAutoRunToggle`（保存时自动构建并运行的开关）
-  - `:QuickCMake`、`:QuickCMakeRun [target]`
-  - 默认快捷键：`<leader>cb`、`<leader>cr`、`<leader>cR`、`<leader>cD`、`<leader>cm`
-  - 键位可配置/禁用：通过 `setup({ keymaps = { ... } })` 自定义（设为 `nil`/`''` 可单独禁用；`enabled=false` 可全部禁用）
+### 改进
+- 预览使用更稳健的实现与跨平台路径拼接（Windows 兼容）。
+- 键位注入采用 `unique=true`，不再覆盖用户已有映射。
 
-### 变更
+### 配置变化
+- `make.telescope` 新增：
+  - `preview`、`max_preview_bytes`、`max_preview_lines`、`set_filetype`、`choose_terminal`。
+- 默认配置注释更详尽，README 新增使用说明与故障排查。
+- 默认快捷键：`make` 改为 `<leader>cM`（避免与部分配置冲突）。
 
-- 默认输出名策略保持不变；当需要询问输出名时，改用 `vim.ui.input`，不再阻塞。
-- `QuickCBR` 改为在构建成功后回调触发运行，避免定时器带来的竞态。
-- 在 Windows/PowerShell 下对路径进行恰当引用，提升空格路径的兼容性。
+### 迁移指南
+- 如你依赖旧的 `<leader>cm`，请在 `setup({ keymaps = { make = '<leader>cm' } })` 中显式设置。
+- 如不希望弹出终端选择器，将 `make.telescope.choose_terminal = 'never'`。
 
-### 依赖与兼容
+---
 
-- 需要 Neovim 0.8+。
-- 可选依赖：
-  - 终端：`betterTerm`（若安装则优先使用）
-  - 调试：`nvim-dap` 与 `codelldb`
-  - Make 选择器：`nvim-telescope/telescope.nvim` 与 `nvim-lua/plenary.nvim`
+## v1.0.1 (2025-10-24)
 
-### 升级指引
+### 内部重构
 
-- 如想关闭 Make 集成或指定 `make` 可执行名，可在 `setup` 中：
-  ```lua
-  require('quick-c').setup({
-    make = {
-      enabled = true,
-      prefer = nil, -- Windows 可设 "mingw32-make"
-      cwd = nil,
-      telescope = { prompt_title = "Quick-c Make Targets" },
-    },
-  })
-  ```
-- 快捷键 `<leader>cm` 用于打开 Make 目标选择器，可自行移除或修改映射。
+- 拆分大文件 `init.lua` 为多个模块，维护性更好，API 不变：
+  - `config.lua` 默认配置
+  - `util.lua` 工具函数（平台/路径/消息）
+  - `terminal.lua` 终端封装（betterTerm/内置）
+  - `make_search.lua` 异步 Makefile 搜索与目录选择
+  - `make.lua` 选择 make/解析目标/在 cwd 执行
+  - `telescope.lua` Telescope 交互（目录与目标、自定义参数）
+  - `build.lua` 构建/运行/调试
+  - `autorun.lua` 保存即运行
+  - `keys.lua` 键位注入
 
-### 已知问题
-
-- `make -qp` 目标解析依赖项目目录下的 `Makefile`，若未找到可能无法显示目标。
-- Windows 用户若无 `make` 可安装 MinGW 并使用 `mingw32-make`。

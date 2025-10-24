@@ -1,5 +1,20 @@
 # Quick-c Release Notes
 
+## v1.2.0 (2025-10-24)
+
+### 新增
+- Make 目标参数支持：执行目标前可输入附加参数（如 `-j4 VAR=1`），并按目录记忆最近一次输入。
+- `.PHONY` 优先：`.PHONY` 目标优先显示并标注 `[PHONY]`；在 Telescope 中可用 `<C-p>` 切换“仅显示 .PHONY”。
+
+### 改进
+- README 重构：移除 Autorun 功能与文档残留；完善 Make 参数与 `.PHONY` 说明，三重懒加载示例保持一致。
+- 目标解析结构化：`make -qp` 解析同时产出 `{ targets, phony }` 并加入缓存（TTL + mtime）。
+
+### 兼容性
+- `make.args` 新配置：`prompt`/`default`/`remember`。
+- `make.targets.prioritize_phony` 新配置，默认开启。
+
+---
 ## v1.1.1 (2025-10-24)
 
 ### 改进

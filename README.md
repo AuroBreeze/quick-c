@@ -177,6 +177,17 @@ use({
         cache = {
           ttl = 10,
         },
+        -- 目标列表行为
+        targets = {
+          -- 将 .PHONY 目标在列表中优先显示（Telescope 内可用 <C-p> 切换“仅显示 .PHONY”）
+          prioritize_phony = true,
+        },
+        -- 追加 make 参数（如 -j4、VAR=1），并记住每个 cwd 最近一次输入
+        args = {
+          prompt = true,   -- 选择目标后是否弹出输入框
+          default = "",    -- 默认参数
+          remember = true, -- 记忆最近一次输入，作为默认值
+        },
       },
       keymaps = {
         -- 设为 false 可不注入任何默认键位（你可自行映射命令）

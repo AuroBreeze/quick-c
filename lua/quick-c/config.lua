@@ -57,6 +57,14 @@ C.defaults = {
     cache = {
       ttl = 10, -- 目标解析缓存（秒）。同一 cwd 且 Makefile 未变化时，在 TTL 内复用上次解析结果
     },
+    targets = {
+      prioritize_phony = true, -- 将 .PHONY 目标在列表中优先显示
+    },
+    args = {
+      prompt = true,    -- 选择目标后是否弹出输入框追加参数（例如 -j4 VAR=1）
+      default = "",     -- 默认参数
+      remember = true,  -- 记住每个 cwd 最近一次输入，作为下次默认值
+    },
   },
   keymaps = {
     enabled = true,

@@ -1,5 +1,6 @@
 local M = {}
 local U = require('quick-c.util')
+local LAST_ARGS = {}
 
 -- Telescope picker for make: select cwd (resolved outside) -> list targets -> run
 -- External dependencies are injected to avoid circular requires.
@@ -35,17 +36,59 @@ function M.telescope_make(config,
 
   local base = (config.make and config.make.cwd) or vim.fn.fnamemodify(vim.fn.expand('%:p'), ':h')
   resolve_make_cwd_async(base, function(cwd)
-    parse_make_targets_in_cwd_async(cwd, function(targets)
+    parse_make_targets_in_cwd_async(cwd, function(res)
+      local targets, phony_set = {}, {}
+      if type(res) == 'table' and res.targets then
+        targets = res.targets or {}
+        phony_set = res.phony or {}
+      else
+        targets = res or {}
+      end
       if #targets == 0 then
         vim.notify('未解析到任何 make 目标', vim.log.levels.WARN)
         return
       end
-      local results = vim.list_extend({ '[自定义参数…]' }, targets)
-      local title = (config.make.telescope and config.make.telescope.prompt_title) or 'Make Targets'
       local telcfg = (config.make and config.make.telescope) or {}
+      local mktargets = (config.make and config.make.targets) or {}
+      local mkargs = (config.make and config.make.args) or {}
+      local phony_only = false
+
+      local function build_entries()
+        local entries = {}
+        table.insert(entries, { display = '[自定义参数…]', kind = 'args' })
+        local list = {}
+        if mktargets.prioritize_phony ~= false then
+          local a, b = {}, {}
+          for _, t in ipairs(targets) do
+            if phony_set[t] then table.insert(a, t) else table.insert(b, t) end
+          end
+          list = {}
+          if phony_only then
+            list = a
+          else
+            for _, t in ipairs(a) do table.insert(list, t) end
+            for _, t in ipairs(b) do table.insert(list, t) end
+          end
+        else
+          list = targets
+        end
+        for _, t in ipairs(list) do
+          local disp = phony_set[t] and (t .. ' [PHONY]') or t
+          table.insert(entries, { display = disp, value = t, kind = 'target', phony = phony_set[t] or false })
+        end
+        return entries
+      end
+
+      local entries = build_entries()
+      local title = (config.make.telescope and config.make.telescope.prompt_title) or 'Make Targets'
       pickers.new({}, {
         prompt_title = title .. ' (' .. cwd .. ')',
-        finder = finders.new_table({ results = results }),
+        finder = finders.new_table({
+          results = entries,
+          entry_maker = function(e)
+            return { value = e.value, display = e.display, ordinal = e.display, kind = e.kind, phony = e.phony }
+          end,
+        }),
         sorter = conf.generic_sorter({}),
         previewer = (function()
           if telcfg.preview == false then return nil end
@@ -88,30 +131,66 @@ function M.telescope_make(config,
             end,
           })
         end)(),
-        attach_mappings = function(_, map)
+        attach_mappings = function(bufnr, map)
           local actions = require('telescope.actions')
           local action_state = require('telescope.actions.state')
-          local function choose(bufnr)
-            local entry = action_state.get_selected_entry()
-            actions.close(bufnr)
-            local val = entry[1]
-            if val == '[自定义参数…]' then
-              local ui = vim.ui or {}
-              if ui.input then
-                ui.input({ prompt = 'make 参数: ' }, function(args)
-                  if not args or args == '' then return end
-                  local prog = choose_make()
-                  if not prog then vim.notify('未找到 make 或 mingw32-make', vim.log.levels.ERROR); return end
-                  local cmd = string.format('%s -C %s %s', prog, shell_quote_path(cwd), args)
-                  run_make_in_terminal(cmd)
-                end)
+          local function run_with_args(target)
+            local def = mkargs.default or ''
+            if mkargs.remember ~= false then def = LAST_ARGS[cwd] or def end
+            local ui = vim.ui or {}
+            if not ui.input then make_run_in_cwd(target, cwd); return end
+            ui.input({ prompt = 'make 参数: ', default = def }, function(arg)
+              if arg and arg ~= '' then
+                if mkargs.remember ~= false then LAST_ARGS[cwd] = arg end
+                local prog = choose_make()
+                if not prog then vim.notify('未找到 make 或 mingw32-make', vim.log.levels.ERROR); return end
+                local cmd = string.format('%s -C %s %s %s', prog, shell_quote_path(cwd), target or '', arg)
+                run_make_in_terminal(cmd)
+              else
+                make_run_in_cwd(target, cwd)
               end
+            end)
+          end
+
+          local function choose(pbuf)
+            local entry = action_state.get_selected_entry()
+            actions.close(pbuf)
+            if entry.kind == 'args' then
+              local def = mkargs.default or ''
+              if mkargs.remember ~= false then def = LAST_ARGS[cwd] or def end
+              local ui = vim.ui or {}
+              if not ui.input then return end
+              ui.input({ prompt = 'make 参数: ', default = def }, function(arg)
+                if not arg or arg == '' then return end
+                if mkargs.remember ~= false then LAST_ARGS[cwd] = arg end
+                local prog = choose_make()
+                if not prog then vim.notify('未找到 make 或 mingw32-make', vim.log.levels.ERROR); return end
+                local cmd = string.format('%s -C %s %s', prog, shell_quote_path(cwd), arg)
+                run_make_in_terminal(cmd)
+              end)
+              return
+            end
+            if mkargs.prompt ~= false then
+              run_with_args(entry.value)
             else
-              make_run_in_cwd(val, cwd)
+              make_run_in_cwd(entry.value, cwd)
             end
           end
           map('i', '<CR>', choose)
           map('n', '<CR>', choose)
+          local function toggle_phony_only()
+            phony_only = not phony_only
+            local picker = action_state.get_current_picker(bufnr)
+            local new_entries = build_entries()
+            picker:refresh(finders.new_table({
+              results = new_entries,
+              entry_maker = function(e)
+                return { value = e.value, display = e.display, ordinal = e.display, kind = e.kind, phony = e.phony }
+              end,
+            }), { reset_prompt = false })
+          end
+          map('i', '<C-p>', toggle_phony_only)
+          map('n', '<C-p>', toggle_phony_only)
           return true
         end,
       }):find()

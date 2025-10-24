@@ -63,7 +63,26 @@ function T.list_open_builtin_terminals()
 end
 
 -- Send command to a specific builtin terminal job
-function T.send_to_builtin_terminal(is_windows, job, cmd)
+local function open_builtin_terminal_window(config, bufnr)
+  -- Try to focus existing window showing the buffer; otherwise open a split and show it
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == bufnr then
+      pcall(vim.api.nvim_set_current_win, win)
+      return true
+    end
+  end
+  local height = (config.terminal and config.terminal.height) or 12
+  vim.cmd("botright split")
+  vim.cmd(string.format("resize %d", height))
+  pcall(vim.api.nvim_win_set_buf, 0, bufnr)
+  return true
+end
+
+function T.send_to_builtin_terminal(is_windows, job, cmd, opts)
+  opts = opts or {}
+  if opts.bufnr and vim.api.nvim_buf_is_valid(opts.bufnr) then
+    pcall(open_builtin_terminal_window, opts.config or {}, opts.bufnr)
+  end
   local nl = is_windows() and '\r' or '\n'
   return pcall(vim.fn.chansend, job, cmd .. nl)
 end
@@ -80,10 +99,11 @@ function T.select_or_run_in_terminal(config, is_windows, cmdline, notify_warn, n
   local finders = require('telescope.finders')
   local conf = require('telescope.config').values
   local entries = {}
-  table.insert(entries, { display = '[默认终端策略]', kind = 'default' })
+  local prog = (cmdline:match('^%S+') or 'cmd')
+  table.insert(entries, { display = string.format('[默认终端策略] → %s', prog), kind = 'default' })
   for _, it in ipairs(open_terms) do
     local disp = string.format('buf #%d | %s', it.bufnr, (it.name ~= '' and it.name or 'terminal'))
-    table.insert(entries, { display = disp, kind = 'builtin', job = it.job })
+    table.insert(entries, { display = disp, kind = 'builtin', job = it.job, bufnr = it.bufnr })
   end
   pickers.new({}, {
     prompt_title = '选择终端以发送命令',
@@ -104,7 +124,7 @@ function T.select_or_run_in_terminal(config, is_windows, cmdline, notify_warn, n
         if v.kind == 'default' then
           T.run_make_in_terminal(config, is_windows, cmdline, notify_warn, notify_err)
         else
-          local ok = T.send_to_builtin_terminal(is_windows, v.job, cmdline)
+          local ok = T.send_to_builtin_terminal(is_windows, v.job, cmdline, { bufnr = v.bufnr, config = config })
           if not ok then
             notify_warn('发送到选定终端失败，改用默认策略')
             T.run_make_in_terminal(config, is_windows, cmdline, notify_warn, notify_err)

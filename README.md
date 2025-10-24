@@ -100,7 +100,13 @@ require("quick-c").setup({
     -- Makefile 搜索：若未显式设置 cwd，则从当前文件目录开始
     -- 向上最多 2 层、向下最多 3 层查找含 Makefile 的目录
     search = { up = 2, down = 3, ignore_dirs = { '.git', 'node_modules', '.cache' } },
-    telescope = { prompt_title = "Quick-c Make Targets" },
+    telescope = {
+      prompt_title = "Quick-c Make Targets",
+      preview = true,                 -- 是否启用 Telescope 预览
+      max_preview_bytes = 200 * 1024, -- 预览最多读取的字节数（大文件截断）
+      max_preview_lines = 2000,       -- 预览最多显示的行数（大文件截断）
+      set_filetype = true,            -- 预览 buffer 是否设置 filetype = 'make'
+    },
   },
   keymaps = {
     enabled = true,         -- 设为 false 可不注入任何默认键位
@@ -143,7 +149,19 @@ require("quick-c").setup({
 - `<leader>cD` → 调试
 - `<leader>cm` → 打开 Make 目标选择器（Telescope）
 
-提示：以上键位均可通过 `setup({ keymaps = { ... } })` 自定义或禁用。
+提示：
+- 以上键位均可通过 `setup({ keymaps = { ... } })` 自定义或禁用。
+- 插件设置键位时使用 `unique=true`，不会覆盖你已有的映射；如键位已被占用会跳过注入。
+
+### Telescope 预览说明
+
+- 目录选择器与目标选择器均内置 Makefile 预览。
+- 目标选择器阶段，预览固定显示已选目录中的 Makefile，不随光标移动刷新（避免卡顿）。
+- 对大文件自动截断，受以下配置项控制：
+  - `make.telescope.preview`：是否启用预览。
+  - `make.telescope.max_preview_bytes`：超过该字节数则改为按行读取并截断。
+  - `make.telescope.max_preview_lines`：截断时最多显示的行数。
+  - `make.telescope.set_filetype`：是否设置预览 buffer 的 `filetype=make`。
 
 ### Makefile 搜索说明
 

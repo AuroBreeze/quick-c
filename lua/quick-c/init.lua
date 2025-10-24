@@ -14,15 +14,6 @@ local function find_make_root_async(start_dir, cb)
   return MS.find_make_root_async(M.config, start_dir, cb)
 end
 
--- Make/Telescope helpers
-local function run_make_in_terminal(cmdline)
-  return T.run_make_in_terminal(M.config, is_windows, cmdline, U.notify_warn, U.notify_err)
-end
-
-local function shell_quote_path(p)
-  return U.shell_quote_path(p)
-end
-
 local function choose_make()
   return MK.choose_make(M.config)
 end

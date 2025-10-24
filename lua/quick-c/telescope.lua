@@ -42,11 +42,13 @@ function M.telescope_make(config,
       end
       local results = vim.list_extend({ '[自定义参数…]' }, targets)
       local title = (config.make.telescope and config.make.telescope.prompt_title) or 'Make Targets'
+      local telcfg = (config.make and config.make.telescope) or {}
       pickers.new({}, {
         prompt_title = title .. ' (' .. cwd .. ')',
         finder = finders.new_table({ results = results }),
         sorter = conf.generic_sorter({}),
         previewer = (function()
+          if telcfg.preview == false then return nil end
           local previewers = require('telescope.previewers')
           local conf_t = require('telescope.config').values
           local uv = vim.loop
@@ -69,8 +71,19 @@ function M.telescope_make(config,
                 loaded = true
                 return
               end
-              conf_t.buffer_previewer_maker(fixed_path, self.state.bufnr, { bufname = self.state.bufname })
-              pcall(vim.api.nvim_buf_set_option, self.state.bufnr, 'filetype', 'make')
+              local st = uv.fs_stat(fixed_path) or {}
+              local max_bytes = telcfg.max_preview_bytes or (200 * 1024)
+              local max_lines = telcfg.max_preview_lines or 2000
+              local set_ft = (telcfg.set_filetype ~= false)
+              if st.size and st.size > max_bytes then
+                local ok, lines = pcall(vim.fn.readfile, fixed_path, '', max_lines)
+                if not ok then lines = { '[Preview truncated: failed to read file]' } end
+                table.insert(lines, 1, string.format('[Preview truncated: %d bytes > %d bytes, showing first %d lines]', st.size or 0, max_bytes, max_lines))
+                vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+              else
+                conf_t.buffer_previewer_maker(fixed_path, self.state.bufnr, { bufname = self.state.bufname })
+              end
+              if set_ft then pcall(vim.api.nvim_buf_set_option, self.state.bufnr, 'filetype', 'make') end
               loaded = true
             end,
           })

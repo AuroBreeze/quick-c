@@ -185,6 +185,7 @@ function M.resolve_make_cwd_async(config, start_dir, cb)
       end
       table.insert(entries, { display = rel, path = d })
     end
+    local telcfg = (config.make and config.make.telescope) or {}
     pickers.new({}, {
       prompt_title = 'Select Makefile Directory',
       finder = finders.new_table({
@@ -195,7 +196,9 @@ function M.resolve_make_cwd_async(config, start_dir, cb)
       }),
       sorter = conf.generic_sorter({}),
       previewer = (function()
+        if telcfg.preview == false then return nil end
         local previewers = require('telescope.previewers')
+        local conf_t = require('telescope.config').values
         local uv = vim.loop
         local names = { 'Makefile', 'makefile', 'GNUmakefile' }
         local function find_makefile(dir)
@@ -206,10 +209,29 @@ function M.resolve_make_cwd_async(config, start_dir, cb)
           end
           return nil
         end
-        return previewers.vim_buffer_cat.new({
-          get_path = function(entry)
-            local p = find_makefile(entry.value)
-            return p or ''
+        local max_bytes = telcfg.max_preview_bytes or (200 * 1024)
+        local max_lines = telcfg.max_preview_lines or 2000
+        local set_ft = (telcfg.set_filetype ~= false)
+        return previewers.new_buffer_previewer({
+          get_buffer_by_name = function(_, entry)
+            return find_makefile(entry.value) or ('[makefile-preview] ' .. entry.value)
+          end,
+          define_preview = function(self, entry)
+            local path = find_makefile(entry.value)
+            if not path then
+              vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, { '[No Makefile found]' })
+              return
+            end
+            local st = uv.fs_stat(path) or {}
+            if st.size and st.size > max_bytes then
+              local ok, lines = pcall(vim.fn.readfile, path, '', max_lines)
+              if not ok then lines = { '[Preview truncated: failed to read file]' } end
+              table.insert(lines, 1, string.format('[Preview truncated: %d bytes > %d bytes, showing first %d lines]', st.size or 0, max_bytes, max_lines))
+              vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+            else
+              conf_t.buffer_previewer_maker(path, self.state.bufnr, { bufname = self.state.bufname })
+            end
+            if set_ft then pcall(vim.api.nvim_buf_set_option, self.state.bufnr, 'filetype', 'make') end
           end,
         })
       end)(),

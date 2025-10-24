@@ -46,7 +46,13 @@ C.defaults = {
     prefer = nil, -- e.g. "make" | "mingw32-make"
     cwd = nil,    -- 默认使用当前文件所在目录
     search = { up = 2, down = 3, ignore_dirs = { '.git', 'node_modules', '.cache' } },
-    telescope = { prompt_title = "Quick-c Make Targets" },
+    telescope = {
+      prompt_title = "Quick-c Make Targets",
+      preview = true,                 -- 是否启用预览
+      max_preview_bytes = 200 * 1024, -- 预览最多读取的字节数
+      max_preview_lines = 2000,       -- 预览最多显示的行数
+      set_filetype = true,            -- 预览 buffer 是否设置 filetype = 'make'
+    },
   },
   keymaps = {
     enabled = true,

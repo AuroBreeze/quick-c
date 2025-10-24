@@ -106,6 +106,7 @@ require("quick-c").setup({
       max_preview_bytes = 200 * 1024, -- 预览最多读取的字节数（大文件截断）
       max_preview_lines = 2000,       -- 预览最多显示的行数（大文件截断）
       set_filetype = true,            -- 预览 buffer 是否设置 filetype = 'make'
+      choose_terminal = 'auto',       -- 发送命令到终端的选择：'auto'（有打开终端则弹窗选择）、'always'（总是弹窗）、'never'（直接默认策略）
     },
   },
   keymaps = {
@@ -162,6 +163,14 @@ require("quick-c").setup({
   - `make.telescope.max_preview_bytes`：超过该字节数则改为按行读取并截断。
   - `make.telescope.max_preview_lines`：截断时最多显示的行数。
   - `make.telescope.set_filetype`：是否设置预览 buffer 的 `filetype=make`。
+
+### 终端选择行为
+
+- 选择 make 目标后，可将命令发送到已打开的内置终端，或使用默认策略（betterTerm 优先，失败回退内置）。
+- 通过 `make.telescope.choose_terminal` 控制行为：
+  - `'auto'`：存在已打开终端时弹选择器，否则直接默认策略。
+  - `'always'`：总是弹出选择器。
+  - `'never'`：总是使用默认策略。
 
 ### Makefile 搜索说明
 

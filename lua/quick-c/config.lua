@@ -52,6 +52,7 @@ C.defaults = {
       max_preview_bytes = 200 * 1024, -- 预览最多读取的字节数
       max_preview_lines = 2000,       -- 预览最多显示的行数
       set_filetype = true,            -- 预览 buffer 是否设置 filetype = 'make'
+      choose_terminal = 'auto',       -- 发送命令到终端时的选择行为: 'auto' | 'always' | 'never'
     },
   },
   keymaps = {

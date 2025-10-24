@@ -70,9 +70,10 @@ end
 
 -- Select an open terminal (builtin) to send, or fallback to default run
 function T.select_or_run_in_terminal(config, is_windows, cmdline, notify_warn, notify_err)
+  local mode = (((config.make or {}).telescope or {}).choose_terminal) or 'auto'
   local open_terms = T.list_open_builtin_terminals()
   local ok_t = pcall(require, 'telescope')
-  if not ok_t or #open_terms == 0 then
+  if mode == 'never' or not ok_t or (mode == 'auto' and #open_terms == 0) then
     return T.run_make_in_terminal(config, is_windows, cmdline, notify_warn, notify_err)
   end
   local pickers = require('telescope.pickers')

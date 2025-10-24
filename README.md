@@ -155,7 +155,9 @@ use({
         -- 启用/禁用 make 集成
         enabled = true,
         -- 指定优先使用的 make 程序：
-        --   - Windows 可设 "make" 或 "mingw32-make"；未设置时按可执行探测
+        --   - 可为字符串或列表；按顺序探测可执行：
+        --     prefer = 'make' 或 prefer = { 'make', 'mingw32-make' }
+        --   - Windows 常见：{ 'make', 'mingw32-make' }
         prefer = nil,
         -- 固定工作目录（不设置则由插件根据当前文件自动搜索）
         cwd = nil,
@@ -177,6 +179,10 @@ use({
           --   'always'总是弹选择器
           --   'never' 始终走默认策略（betterTerm 优先，失败回退内置）
           choose_terminal = 'auto',
+        },
+        -- 目标解析缓存：同一 cwd 且 Makefile 未变化时，TTL 内复用结果
+        cache = {
+          ttl = 10,
         },
       },
       keymaps = {
@@ -203,6 +209,11 @@ require("quick-c").setup({
   toolchain = {
     windows = { c = { "clang", "gcc", "cl" }, cpp = { "clang++", "g++", "cl" } },
     unix = { c = { "clang", "gcc" }, cpp = { "clang++", "g++" } },
+  },
+  make = {
+    -- 在 Windows 优先尝试 make，不存在时退回到 mingw32-make
+    prefer = { 'make', 'mingw32-make' },
+    cache = { ttl = 15 },
   },
 })
 ```

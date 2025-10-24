@@ -43,7 +43,7 @@ C.defaults = {
   },
   make = {
     enabled = true,
-    prefer = nil, -- e.g. "make" | "mingw32-make"
+    prefer = nil, -- 可为字符串或列表，例如 "make" | "mingw32-make" | { "make", "mingw32-make" }
     cwd = nil,    -- 默认使用当前文件所在目录
     search = { up = 2, down = 3, ignore_dirs = { '.git', 'node_modules', '.cache' } },
     telescope = {
@@ -53,6 +53,9 @@ C.defaults = {
       max_preview_lines = 2000,       -- 预览最多显示的行数
       set_filetype = true,            -- 预览 buffer 是否设置 filetype = 'make'
       choose_terminal = 'auto',       -- 发送命令到终端时的选择行为: 'auto' | 'always' | 'never'
+    },
+    cache = {
+      ttl = 10, -- 目标解析缓存（秒）。同一 cwd 且 Makefile 未变化时，在 TTL 内复用上次解析结果
     },
   },
   keymaps = {

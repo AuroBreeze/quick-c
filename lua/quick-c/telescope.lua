@@ -61,17 +61,47 @@ function M.telescope_make(config,
           end
           local fixed_path = find_makefile(cwd)
           local loaded = false
+          local target_index = nil -- map: target -> line number (1-based)
+          local function build_target_index(path)
+            local ok, lines = pcall(vim.fn.readfile, path)
+            if not ok or type(lines) ~= 'table' then return {} end
+            local idx = {}
+            for i, l in ipairs(lines) do
+              local name = l:match('^([%w%._%-%+/][^:%$#=]*)%s*:')
+              if name then
+                name = name:gsub('%s+$', '')
+                if not name:match('%%%') and not name:match('^%.') and name ~= 'Makefile' and name ~= 'makefile' then
+                  if not idx[name] then idx[name] = i end
+                end
+              end
+            end
+            return idx
+          end
           return previewers.new_buffer_previewer({
             define_preview = function(self)
-              if loaded then return end
-              if not fixed_path or fixed_path == '' then
-                vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, { '[No Makefile found]' })
+              if not loaded then
+                if not fixed_path or fixed_path == '' then
+                  vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, { '[No Makefile found]' })
+                  loaded = true
+                  return
+                end
+                conf_t.buffer_previewer_maker(fixed_path, self.state.bufnr, { bufname = self.state.bufname })
+                pcall(vim.api.nvim_buf_set_option, self.state.bufnr, 'filetype', 'make')
+                target_index = build_target_index(fixed_path)
                 loaded = true
-                return
               end
-              conf_t.buffer_previewer_maker(fixed_path, self.state.bufnr, { bufname = self.state.bufname })
-              pcall(vim.api.nvim_buf_set_option, self.state.bufnr, 'filetype', 'make')
-              loaded = true
+              -- On every selection change, move cursor to the selected target's definition if available
+              local entry = self.state.entry
+              local val = type(entry) == 'table' and (entry.value or entry[1]) or entry
+              if type(val) == 'string' and val ~= '' and val ~= '[自定义参数…]' then
+                local line = target_index and target_index[val]
+                if line then
+                  pcall(vim.api.nvim_win_call, self.state.winid, function()
+                    pcall(vim.api.nvim_win_set_cursor, self.state.winid, { line, 0 })
+                    pcall(vim.cmd, 'normal! zz')
+                  end)
+                end
+              end
             end,
           })
         end)(),

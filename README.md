@@ -97,6 +97,9 @@ require("quick-c").setup({
     enabled = true,
     prefer = nil, -- Windows 可设 "mingw32-make"
     cwd = nil,    -- 默认使用当前文件所在目录
+    -- Makefile 搜索：若未显式设置 cwd，则从当前文件目录开始
+    -- 向上最多 2 层、向下最多 3 层查找含 Makefile 的目录
+    search = { up = 2, down = 3, ignore_dirs = { '.git', 'node_modules', '.cache' } },
     telescope = { prompt_title = "Quick-c Make Targets" },
   },
   keymaps = {
@@ -141,6 +144,14 @@ require("quick-c").setup({
 - `<leader>cm` → 打开 Make 目标选择器（Telescope）
 
 提示：以上键位均可通过 `setup({ keymaps = { ... } })` 自定义或禁用。
+
+### Makefile 搜索说明
+
+- 若未设置 `make.cwd`，插件会在“当前文件所在目录”为起点：
+  - 向上查找至多 `search.up` 层（默认 2 层）
+  - 在每一层向下递归至多 `search.down` 层（默认 3 层）
+  - 找到包含 `Makefile`/`makefile`/`GNUmakefile` 的首个目录作为工作目录
+  - 会跳过 `ignore_dirs` 名单中的目录（默认：`.git`、`node_modules`、`.cache`）
 
 ## Windows 注意事项
 

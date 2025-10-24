@@ -153,6 +153,25 @@ require("quick-c").setup({
   - 找到包含 `Makefile`/`makefile`/`GNUmakefile` 的首个目录作为工作目录
   - 会跳过 `ignore_dirs` 名单中的目录（默认：`.git`、`node_modules`、`.cache`）
 
+## 架构说明
+
+内部已模块化重构，但对外 API 不变：
+
+- 模块划分
+  - `lua/quick-c/init.lua` 装配、命令与键位注入
+  - `lua/quick-c/config.lua` 默认配置
+  - `lua/quick-c/util.lua` 工具函数（平台/路径/消息）
+  - `lua/quick-c/terminal.lua` 终端封装（betterTerm/内置）
+  - `lua/quick-c/make_search.lua` 异步 Makefile 搜索与目录选择
+  - `lua/quick-c/make.lua` 选择 make/解析目标/在 cwd 执行
+  - `lua/quick-c/telescope.lua` Telescope 交互（目录与目标、自定义参数）
+  - `lua/quick-c/build.lua` 构建/运行/调试
+  - `lua/quick-c/autorun.lua` 保存即运行
+  - `lua/quick-c/keys.lua` 键位注入
+
+- 行为保持不变：
+  - 键位可配置/禁用；多 Makefile 时目录先选后执行；选择后自动关闭选择器并在终端执行；全程异步不阻塞。
+
 ## Windows 注意事项
 
 - 如在 PowerShell 下运行，会自动使用 `& 'path\to\exe'` 语法；`cmd`/其它 shell 下会使用 `"path\to\exe"`

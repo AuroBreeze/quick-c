@@ -45,4 +45,76 @@ function T.run_make_in_terminal(config, is_windows, cmdline, notify_warn, notify
   end
 end
 
+-- List open builtin terminal buffers
+function T.list_open_builtin_terminals()
+  local bufs = vim.api.nvim_list_bufs()
+  local items = {}
+  for _, b in ipairs(bufs) do
+    local ok_bt, bt = pcall(vim.api.nvim_buf_get_option, b, 'buftype')
+    if ok_bt and bt == 'terminal' then
+      local ok_job, job = pcall(vim.api.nvim_buf_get_var, b, 'terminal_job_id')
+      if ok_job and job and job > 0 then
+        local name = vim.api.nvim_buf_get_name(b)
+        table.insert(items, { bufnr = b, job = job, name = name })
+      end
+    end
+  end
+  return items
+end
+
+-- Send command to a specific builtin terminal job
+function T.send_to_builtin_terminal(is_windows, job, cmd)
+  local nl = is_windows() and '\r' or '\n'
+  return pcall(vim.fn.chansend, job, cmd .. nl)
+end
+
+-- Select an open terminal (builtin) to send, or fallback to default run
+function T.select_or_run_in_terminal(config, is_windows, cmdline, notify_warn, notify_err)
+  local open_terms = T.list_open_builtin_terminals()
+  local ok_t = pcall(require, 'telescope')
+  if not ok_t or #open_terms == 0 then
+    return T.run_make_in_terminal(config, is_windows, cmdline, notify_warn, notify_err)
+  end
+  local pickers = require('telescope.pickers')
+  local finders = require('telescope.finders')
+  local conf = require('telescope.config').values
+  local entries = {}
+  table.insert(entries, { display = '[默认终端策略]', kind = 'default' })
+  for _, it in ipairs(open_terms) do
+    local disp = string.format('buf #%d | %s', it.bufnr, (it.name ~= '' and it.name or 'terminal'))
+    table.insert(entries, { display = disp, kind = 'builtin', job = it.job })
+  end
+  pickers.new({}, {
+    prompt_title = '选择终端以发送命令',
+    finder = finders.new_table({
+      results = entries,
+      entry_maker = function(e)
+        return { value = e, display = e.display, ordinal = e.display }
+      end,
+    }),
+    sorter = conf.generic_sorter({}),
+    attach_mappings = function(_, map)
+      local actions = require('telescope.actions')
+      local action_state = require('telescope.actions.state')
+      local function choose(bufnr)
+        local entry = action_state.get_selected_entry()
+        actions.close(bufnr)
+        local v = entry.value
+        if v.kind == 'default' then
+          T.run_make_in_terminal(config, is_windows, cmdline, notify_warn, notify_err)
+        else
+          local ok = T.send_to_builtin_terminal(is_windows, v.job, cmdline)
+          if not ok then
+            notify_warn('发送到选定终端失败，改用默认策略')
+            T.run_make_in_terminal(config, is_windows, cmdline, notify_warn, notify_err)
+          end
+        end
+      end
+      map('i', '<CR>', choose)
+      map('n', '<CR>', choose)
+      return true
+    end,
+  }):find()
+end
+
 return T

@@ -36,7 +36,7 @@ end
 
 -- Make/Telescope helpers
 local function run_make_in_terminal(cmdline)
-  return T.run_make_in_terminal(M.config, is_windows, cmdline, notify_warn, notify_err)
+  return T.select_or_run_in_terminal(M.config, is_windows, cmdline, notify_warn, notify_err)
 end
 
 local function shell_quote_path(p)

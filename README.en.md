@@ -120,51 +120,68 @@ Create a `.quick-c.json` file in your project root directory to customize config
 - Same structure as Lua configuration
 - Support all configuration options
 
-Example `.quick-c.json`:
-```json
+Example `.quick-c.json` (annotated):
+```jsonc
 {
+  // Output directory: "source" means write to the same folder as the source file; custom path is supported
   "outdir": "build",
+
+  // Toolchain priority (per platform, per language); picks the first executable
   "toolchain": {
-    "windows": {
-      "c": ["gcc", "cl"],
-      "cpp": ["g++", "cl"]
-    },
-    "unix": {
-      "c": ["gcc", "clang"],
-      "cpp": ["g++", "clang++"]
-    }
+    "windows": { "c": ["gcc", "cl"], "cpp": ["g++", "cl"] },
+    "unix":    { "c": ["gcc", "clang"], "cpp": ["g++", "clang++"] }
   },
+
+  // compile_commands.json for LSP (e.g., clangd)
   "compile_commands": {
-    "mode": "generate",
-    "outdir": "build"
+    "mode": "generate",     // generate | use
+    "outdir": "build"        // where to write; "source" writes to the source file's directory
+    // "use_path": "./compile_commands.json" // when mode = use, copy from this path
   },
+
+  // Diagnostics collection into quickfix
   "diagnostics": {
     "quickfix": {
-      "open": "warning",
-      "jump": "warning",
-      "use_telescope": true
+      "open": "warning",      // always | error | warning | never
+      "jump": "warning",      // always | error | warning | never
+      "use_telescope": true    // prefer Telescope quickfix if available
     }
   },
+
+  // Make settings
   "make": {
+    // Preferred make program: string or list; on Windows often ["make", "mingw32-make"]
     "prefer": ["make", "mingw32-make"],
+    // Force using the preferred value even if not found in PATH or file missing
+    // e.g., { "prefer": "make", "prefer_force": true }
+    "prefer_force": false,
+    // Optional wrapper (planned): run via WSL on Windows, e.g., "wsl"
+    // "wrapper": "wsl",
+
+    // Fixed working directory used for -C
+    // Note: the directory must exist; otherwise it falls back to the start dir with a warning
+    // If it has no Makefile, the plugin will search downward within this directory (depth = search.down)
     "cwd": ".",
+
+    // Search strategy (used when cwd is not set, or cwd requires searching within it)
     "search": {
-      "up": 2,
-      "down": 3,
-      "ignore_dirs": [".git", "node_modules", ".cache", "build"]
+      "up": 2,                       // go up at most this many levels (bounded by :pwd)
+      "down": 3,                     // per-level downward recursion depth
+      "ignore_dirs": [".git", "node_modules", ".cache"] // directories to skip
+      // Enhancement: even for ignored dirs, perform a one-level probe; if a Makefile exists at the root, include it
     },
-    "telescope": {
-      "prompt_title": "Project Build Targets"
-    },
-    "cache": {
-      "ttl": 10
-    },
-    "args": {
-      "prompt": true,
-      "default": "-j4",
-      "remember": true
-    }
+
+    // Telescope display
+    "telescope": { "prompt_title": "Project Build Targets" },
+
+    // Target cache: reuse results within TTL when Makefile unchanged under the same cwd
+    "cache": { "ttl": 10 },
+
+    // Extra make args (e.g., -j4 VAR=1), remember last input per cwd
+    "args": { "prompt": true, "default": "-j4", "remember": true }
   },
+
+  // Default keymaps (customizable/disable-able); injected only when keymaps.enabled != false
   "keymaps": {
     "build": "<leader>cb",
     "run": "<leader>cr",

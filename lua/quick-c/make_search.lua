@@ -289,7 +289,100 @@ function M.resolve_make_cwd_async(config, start_dir, cb)
       cwd = vim.fn.fnamemodify(U.join(base, cwd), ':p')
     end
     if vim.fn.isdirectory(cwd) == 1 then
-      cb(cwd)
+      -- If cwd doesn't contain a Makefile, auto search downward within cwd
+      local uv = vim.loop
+      local names = { 'Makefile', 'makefile', 'GNUmakefile' }
+      local function has_makefile(dir)
+        for _, n in ipairs(names) do
+          local st = uv.fs_stat(U.join(dir, n))
+          if st and st.type == 'file' then return true end
+        end
+        return false
+      end
+      if has_makefile(cwd) then
+        cb(cwd)
+        return
+      end
+      -- Downward-only search inside cwd
+      local cfg2 = vim.deepcopy(config)
+      cfg2.make = cfg2.make or {}
+      cfg2.make.search = cfg2.make.search or {}
+      cfg2.make.search.up = 0
+      local ok_t = pcall(require, 'telescope')
+      M.find_make_roots_async(cfg2, cwd, function(roots)
+        if #roots == 0 then cb(cwd) return end
+        if #roots == 1 or not ok_t then cb(roots[1]) return end
+        local pickers = require('telescope.pickers')
+        local finders = require('telescope.finders')
+        local conf = require('telescope.config').values
+        local pwd = vim.fn.getcwd()
+        local entries = {}
+        for _, d in ipairs(roots) do
+          local rel = vim.fn.fnamemodify(d, ':p')
+          if rel:sub(1, #pwd) == pwd then rel = '.' .. rel:sub(#pwd + 1) end
+          table.insert(entries, { display = rel, path = d })
+        end
+        local telcfg = (cfg2.make and cfg2.make.telescope) or {}
+        pickers.new({}, {
+          prompt_title = 'Select Makefile Directory',
+          finder = finders.new_table({
+            results = entries,
+            entry_maker = function(e) return { value = e.path, display = e.display, ordinal = e.display } end,
+          }),
+          sorter = conf.generic_sorter({}),
+          previewer = (function()
+            if telcfg.preview == false then return nil end
+            local previewers = require('telescope.previewers')
+            local conf_t = require('telescope.config').values
+            local function find_makefile(dir)
+              for _, n in ipairs(names) do
+                local p = U.join(dir, n)
+                local st = uv.fs_stat(p)
+                if st and st.type == 'file' then return p end
+              end
+              return nil
+            end
+            local max_bytes = telcfg.max_preview_bytes or (200 * 1024)
+            local max_lines = telcfg.max_preview_lines or 2000
+            local set_ft = (telcfg.set_filetype ~= false)
+            return previewers.new_buffer_previewer({
+              get_buffer_by_name = function(_, entry)
+                return find_makefile(entry.value) or ('[makefile-preview] ' .. entry.value)
+              end,
+              define_preview = function(self, entry)
+                local path = find_makefile(entry.value)
+                if not path then
+                  vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, { '[No Makefile found]' })
+                  return
+                end
+                local st = uv.fs_stat(path) or {}
+                if st.size and st.size > max_bytes then
+                  local ok, lines = pcall(vim.fn.readfile, path, '', max_lines)
+                  if not ok then lines = { '[Preview truncated: failed to read file]' } end
+                  table.insert(lines, 1, string.format('[Preview truncated: %d bytes > %d bytes, showing first %d lines]', st.size or 0, max_bytes, max_lines))
+                  vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+                else
+                  conf_t.buffer_previewer_maker(path, self.state.bufnr, { bufname = self.state.bufname })
+                end
+                if set_ft then pcall(vim.api.nvim_buf_set_option, self.state.bufnr, 'filetype', 'make') end
+              end,
+            })
+          end)(),
+          attach_mappings = function(_, map)
+            local actions = require('telescope.actions')
+            local action_state = require('telescope.actions.state')
+            local function choose(bufnr)
+              local entry = action_state.get_selected_entry()
+              actions.close(bufnr)
+              cb(entry.value)
+            end
+            map('i', '<CR>', choose)
+            map('n', '<CR>', choose)
+            return true
+          end,
+        }):find()
+      end)
+      return
     else
       U.notify_warn('指定的 make.cwd 目录不存在：' .. tostring(cwd) .. '，已回退到起点目录')
       cb(start_dir)

@@ -19,12 +19,45 @@ end
 
 function M.choose_make(config)
   local pref = (config.make or {}).prefer
+  local force = ((config.make or {}).prefer_force == true)
   local function is_exec(x) return x and vim.fn.executable(x) == 1 end
+  local function is_path(x)
+    if not x or type(x) ~= 'string' then return false end
+    if U.is_windows() then return x:match('[\\/]') or x:match('%.exe$') end
+    return x:sub(1,1) == '/' or x:match('[\\/]')
+  end
+  local function quote_if_needed(p)
+    if not p then return p end
+    if p:find('%s') then return string.format('%q', p) end
+    return p
+  end
+  local function path_exists_file(p)
+    local st = vim.loop.fs_stat(p)
+    return st and st.type == 'file'
+  end
   if type(pref) == 'string' then
-    if is_exec(pref) then return pref end
+    if is_path(pref) then
+      if path_exists_file(pref) then return quote_if_needed(pref) end
+      if force then return quote_if_needed(pref) end
+      U.notify_warn("首选 make 程序路径不存在：" .. tostring(pref))
+    elseif is_exec(pref) then
+      return pref
+    else
+      if force then return pref end
+      U.notify_warn("首选 make 程序不可执行：" .. tostring(pref) .. "（未在 PATH 中找到）")
+    end
   elseif type(pref) == 'table' then
-    for _, name in ipairs(pref) do
-      if is_exec(name) then return name end
+    if force and #pref > 0 then
+      local name = pref[1]
+      if is_path(name) then return quote_if_needed(name) else return name end
+    else
+      for _, name in ipairs(pref) do
+        if is_path(name) then
+          if path_exists_file(name) then return quote_if_needed(name) end
+        elseif is_exec(name) then
+          return name
+        end
+      end
     end
   end
   if is_exec('make') then return 'make' end

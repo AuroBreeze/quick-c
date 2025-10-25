@@ -107,37 +107,55 @@ function M.parse_make_targets_in_cwd_async(config, cwd, cb)
     cb({ targets = entry.targets, phony = entry.phony or {} })
     return
   end
-  local lines = {}
-  local job = vim.fn.jobstart({ strip_quotes(prog), '-qp' }, {
-    cwd = cwd,
-    stdout_buffered = true,
-    on_stdout = function(_, data)
-      if data then for _, l in ipairs(data) do table.insert(lines, l) end end
-    end,
-    on_exit = function()
-      local targets, seen = {}, {}
-      local phony = {}
-      for _, l in ipairs(lines) do
-        -- collect .PHONY
-        local plist = l:match('^%.PHONY%s*:%s*(.+)')
-        if plist then
-          for name in plist:gmatch('%S+') do phony[name] = true end
-        else
-          local name = l:match('^([%w%._%-%+/][^:%$#=]*)%s*:')
-          if name then
-            name = name:gsub('%s+$', '')
-            if not name:match('%%%') and not name:match('^%.') and name ~= 'Makefile' and name ~= 'makefile' then
-              if not seen[name] then seen[name] = true; table.insert(targets, name) end
-            end
+  local function parse_lines(lines)
+    local targets, seen = {}, {}
+    local phony = {}
+    for _, l in ipairs(lines) do
+      local plist = l:match('^%.PHONY%s*:%s*(.+)')
+      if plist then
+        for name in plist:gmatch('%S+') do phony[name] = true end
+      else
+        local name = l:match('^([%w%._%-%+/\\][^:%$#=]*)%s*:')
+        if name then
+          name = name:gsub('%s+$', '')
+          if not name:match('%%%') and not name:match('^%.')
+             and name ~= 'Makefile' and name ~= 'makefile' and name ~= 'GNUmakefile' then
+            if not seen[name] then seen[name] = true; table.insert(targets, name) end
           end
         end
       end
-      table.sort(targets)
+    end
+    table.sort(targets)
+    return targets, phony
+  end
+  local function run_and_collect(flags, done)
+    local lines = {}
+    local job = vim.fn.jobstart({ strip_quotes(prog), flags }, {
+      cwd = cwd,
+      stdout_buffered = true,
+      on_stdout = function(_, data)
+        if data then for _, l in ipairs(data) do table.insert(lines, l) end end
+      end,
+      on_exit = function()
+        done(lines)
+      end,
+    })
+    if job <= 0 then done({}) end
+  end
+  run_and_collect('-qp', function(lines_qp)
+    local targets, phony = parse_lines(lines_qp)
+    if #targets == 0 then
+      -- Fallback to -pn for broader compatibility (e.g., some make variants)
+      run_and_collect('-pn', function(lines_pn)
+        local t2, p2 = parse_lines(lines_pn)
+        target_cache[cwd] = { mtime = cur_mtime, at = os.time(), targets = t2, phony = p2 }
+        cb({ targets = t2, phony = p2 })
+      end)
+    else
       target_cache[cwd] = { mtime = cur_mtime, at = os.time(), targets = targets, phony = phony }
       cb({ targets = targets, phony = phony })
-    end,
-  })
-  if job <= 0 then cb({}) end
+    end
+  end)
 end
 
 function M.make_run_in_cwd(config, cwd, target, run_fn)

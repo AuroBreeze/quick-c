@@ -93,7 +93,9 @@ function M.parse_make_targets_in_cwd_async(config, cwd, cb)
   local prog = M.choose_make(config)
   if not prog then cb({}) return end
   if not can_execute_prog(prog) then
-    U.notify_err("'" .. tostring(prog) .. "' 不可执行，无法解析目标（请检查 PATH 或配置 make.prefer）")
+    local force = ((config.make or {}).prefer_force == true)
+    local msg = "Quick-c: '" .. tostring(prog) .. "' 不可执行，无法解析目标（请检查 PATH 或配置 make.prefer）"
+    if force then U.notify_warn(msg) else U.notify_err(msg) end
     cb({})
     return
   end

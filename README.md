@@ -278,6 +278,10 @@ require("quick-c").setup({
         --   - 可为字符串或列表；按顺序探测可执行：
         --     prefer = 'make' 或 prefer = { 'make', 'mingw32-make' }
         --   - Windows 常见：{ 'make', 'mingw32-make' }
+
+        -- 强制使用不存在的 make 命令
+        prefer_force = false,
+
         prefer = nil,
         -- 固定工作目录（不设置则由插件根据当前文件自动搜索）
         cwd = nil,

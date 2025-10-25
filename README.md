@@ -201,7 +201,7 @@ Quick-c 支持多级配置，优先级从高到低为：
   },
   "make": {
     "prefer": ["make", "mingw32-make"],
-    "cwd": ".",
+    "cwd": ".", // 这个是确定目录，如果这个目录没有就会有问题。
     "search": {
       "up": 2,
       "down": 3,

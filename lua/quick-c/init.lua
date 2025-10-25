@@ -251,12 +251,15 @@ function M.setup(opts)
         end)
     end
 
-    pcall(vim.api.nvim_create_autocmd, 'DirChanged', { callback = function()
+    local ok_grp, grp = pcall(vim.api.nvim_create_augroup, 'QuickC_Autocmds', { clear = true })
+    if not ok_grp then grp = nil end
+    pcall(vim.api.nvim_create_autocmd, 'DirChanged', { group = grp, callback = function()
         schedule_recompute(400)
     end })
 
     -- Auto-reload when saving project config in current root
     pcall(vim.api.nvim_create_autocmd, 'BufWritePost', {
+        group = grp,
         pattern = '.quick-c.json',
         callback = function(args)
             local saved = vim.fn.fnamemodify(args.file or '', ':p')

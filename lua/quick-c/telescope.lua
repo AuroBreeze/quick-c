@@ -230,9 +230,23 @@ function M.telescope_quickc_sources(config)
     vim.notify('未在当前工作目录找到 C/C++ 源文件', vim.log.levels.WARN)
     return
   end
+  local function to_entries(abs_list)
+    local entries = {}
+    for _, abs in ipairs(abs_list) do
+      local rel = vim.fn.fnamemodify(abs, ':.')
+      table.insert(entries, { display = rel, value = abs, ordinal = rel })
+    end
+    return entries
+  end
+  local entries = to_entries(files)
   pickers.new({}, {
     prompt_title = 'Quick-c: Select sources (' .. cwd .. ')',
-    finder = finders.new_table({ results = files }),
+    finder = finders.new_table({
+      results = entries,
+      entry_maker = function(e)
+        return { value = e.value, display = e.display, ordinal = e.ordinal }
+      end,
+    }),
     sorter = conf.generic_sorter({}),
     attach_mappings = function(bufnr, map)
       local actions = require('telescope.actions')
@@ -243,9 +257,9 @@ function M.telescope_quickc_sources(config)
         local sel = action_state.get_selected_entry()
         local srcs = {}
         if multi and #multi > 0 then
-          for _, e in ipairs(multi) do table.insert(srcs, e[1] or e.value or e.path or e) end
+          for _, e in ipairs(multi) do table.insert(srcs, e.value or e[1] or e.path or e) end
         elseif sel then
-          table.insert(srcs, sel[1] or sel.value or sel.path)
+          table.insert(srcs, sel.value or sel[1] or sel.path)
         end
         actions.close(bufnr)
         if not srcs or #srcs == 0 then return end

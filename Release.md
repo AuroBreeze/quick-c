@@ -7,25 +7,35 @@
   - 在项目根目录（`:pwd`）查找并加载，覆盖全局配置
   - 配置优先级：项目配置 > 用户配置 > 默认配置
   - 新命令：`QuickCReload`（重载默认+用户+项目配置）、`QuickCConfig`（打印生效配置与检测到的项目配置路径）
-- 文档：新增/更新项目配置指南（`PROJECT_CONFIG_GUIDE*.md`）与 README（中/英）
+- 配置校验：新增 `QuickCCheck` 命令与校验模块
+  - 检查项目/全局配置类型与关键路径，解析 `make.cwd` 并提示是否会在该目录内向下搜索
+  - 显示最终选择的 make 程序与建议
+- 文档：新增/更新项目配置指南（`PROJECT_CONFIG_GUIDE*.md`，含注释 JSONC 示例）与 README（中/英）
 
 ### 改进
 - 配置加载更健壮：
   - JSON 解析支持 `vim.json.decode` 与 `vim.fn.json_decode` 回退
   - 处理 UTF-8 BOM
   - `DirChanged` 自动重载并加入 400ms 防抖
-  - 重复提示去重：仅在项目配置路径变化时提示“已加载项目配置文件”
+  - 重复提示去重：仅在项目配置路径变化时提示“已加载项目配置文件”，并加入 1s 提示抑制窗口
+  - 使用自动命令组避免重复注册导致的多次提示
 - Make 使用体验：
   - `QuickCMakeRun` 现在遵循 `make.args.prompt/default/remember`，可在运行目标时弹输入框
-  - 相对 `make.cwd` 基于“当前文件所在目录”解析为绝对路径
+  - 相对 `make.cwd` 基于“当前文件所在目录”解析为绝对路径；若目录不存在自动回退到起点目录
+  - 指定 `make.cwd` 但该目录没有 Makefile 时，会在该目录内“向下搜索”，深度沿用 `make.search.down`
+  - Telescope 入口修正基准目录为“当前文件目录”，避免相对路径二次拼接
   - 搜索增强：对被忽略目录进行“一层探测”（不递归），若根下存在 Makefile 也纳入候选
-  - Telescope 预览更稳健（Windows 路径兼容、失败回退到 `readfile`）
-  - 多结果时，目录列表显示相对 `:pwd` 的路径，便于识别
+  - `choose_make` 增强：
+    - 支持 `make.prefer` 传绝对路径（含空格路径）
+    - 新增 `make.prefer_force`，即使不可执行也可强制使用首选项（高阶用法）
+- 键位管理：
+  - 新增 `keymaps.unmap_defaults`（默认开启）：当你修改或禁用某个键位时，自动解除默认键位的旧映射，避免 which-key 中残留旧键位
 
 ### 修复
 - 之前在未找到项目配置时仍提示“已加载项目配置文件”的问题
-- 进入项目时可能出现重复提示的情况
+- 进入项目/保存 `.quick-c.json` 时重复提示的情况（augroup + 抑制窗口）
 - 目标选择时右侧预览偶发不显示 Makefile 的问题
+- `make.cwd` 无效导致 `jobstart` 报错（Invalid argument）的情况，现已在解析阶段回退并给出提示
 
 ### 兼容性
 - 无破坏性变更；默认行为更稳健
@@ -34,7 +44,7 @@
 ### 迁移指南
 - 无需迁移。建议：
   - 在项目根放置 `.quick-c.json`
-  - 使用 `QuickCReload` 使配置立即生效；`QuickCConfig` 查看生效配置
+  - 使用 `QuickCReload` 使配置立即生效；`QuickCConfig` 查看生效配置；`QuickCCheck` 自检配置
 
 ## v1.3.1 (2025-10-25)
 

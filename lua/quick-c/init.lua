@@ -148,6 +148,14 @@ function M.setup(opts)
   vim.api.nvim_create_user_command("QuickCCompileDBUse", function()
     cc_use()
   end, {})
+  vim.api.nvim_create_user_command("QuickCQuickfix", function()
+    local cfg = M.config.diagnostics and M.config.diagnostics.quickfix or {}
+    if cfg.use_telescope then
+      local ok, tb = pcall(require, 'telescope.builtin')
+      if ok then tb.quickfix(); return end
+    end
+    vim.cmd('copen')
+  end, {})
   vim.api.nvim_create_user_command("QuickCMake", function()
     telescope_make()
   end, {})

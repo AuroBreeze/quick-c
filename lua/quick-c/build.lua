@@ -153,19 +153,58 @@ function B.build(config, notify, opts)
       if opts.on_exit then pcall(opts.on_exit, 1, nil) end
       return
     end
+    local all_stdout, all_stderr = {}, {}
     local ok = vim.fn.jobstart(cmd, {
       stdout_buffered = true,
       stderr_buffered = true,
       detach = false,
+      on_stdout = function(_, d)
+        if d and #d > 0 then
+          for _, line in ipairs(d) do table.insert(all_stdout, line) end
+        end
+      end,
       on_stderr = function(_, d)
-        if d and #d > 0 then notify.warn(table.concat(d, '\n')) end
+        if d and #d > 0 then
+          for _, line in ipairs(d) do table.insert(all_stderr, line) end
+        end
       end,
       on_exit = function(_, code)
-        if code == 0 then
-          notify.info('Build OK -> ' .. exe)
-        else
-          notify.err('Build failed (' .. code .. ')')
+        local diagcfg = (config.diagnostics and config.diagnostics.quickfix) or {}
+        local qf_enabled = (diagcfg.enabled ~= false)
+        local lines = {}
+        for _, s in ipairs(all_stdout) do table.insert(lines, s) end
+        for _, s in ipairs(all_stderr) do table.insert(lines, s) end
+        if qf_enabled and #lines > 0 then
+          local items, has_error, has_warning = parse_diagnostics(lines)
+          if #items > 0 then
+            vim.fn.setqflist({}, ' ', { title = 'Quick-c Build', items = items })
+            local function should_open()
+              if diagcfg.open == 'always' then return true end
+              if diagcfg.open == 'error' and has_error then return true end
+              if diagcfg.open == 'warning' and (has_error or has_warning) then return true end
+              return false
+            end
+            local function should_jump()
+              if diagcfg.jump == 'always' then return true end
+              if diagcfg.jump == 'error' and has_error then return true end
+              if diagcfg.jump == 'warning' and (has_error or has_warning) then return true end
+              return false
+            end
+            if should_open() then
+              if diagcfg.use_telescope then
+                local ok_tb, tb = pcall(require, 'telescope.builtin')
+                if ok_tb then tb.quickfix() else vim.cmd('copen') end
+              else
+                vim.cmd('copen')
+              end
+            end
+            if should_jump() then pcall(vim.cmd, 'cc') end
+          else
+            -- clear quickfix on successful build without diagnostics
+            if code == 0 then vim.fn.setqflist({}) end
+          end
         end
+        if code == 0 then notify.info('Build OK -> ' .. exe) else notify.err('Build failed (' .. code .. ')') end
         if opts.on_exit then pcall(opts.on_exit, code, exe) end
       end,
     })

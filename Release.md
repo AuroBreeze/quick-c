@@ -13,6 +13,9 @@
 - Telescope 源选择器
   - `<leader>cqS` 打开，支持多选后选择 Build / Run / Build & Run
   - 多选提示：Tab 选择，Shift+Tab 反向选择，Ctrl+Space 切换选择但不移动
+ - 快速查看诊断的便捷入口
+   - 新命令：`QuickCQuickfix`（优先打开 Telescope quickfix，无则 `:copen`）
+   - 新键位：`<leader>cqf`
 
 ### 改进
 - 默认键位前缀统一为 `<leader>cq*`

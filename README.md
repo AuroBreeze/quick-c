@@ -58,12 +58,15 @@
     { "<leader>cqR", desc = "Quick-c: Build & Run" },
     { "<leader>cqD", desc = "Quick-c: Debug" },
     { "<leader>cqM", desc = "Quick-c: Make targets (Telescope)" },
+    { "<leader>cqS", desc = "Quick-c: Select sources (Telescope)" },
+    { "<leader>cqf", desc = "Quick-c: Open quickfix (Telescope)" },
   },
   -- 3) 命令触发（调用命令时加载，等同“命令提前加载”）
   cmd = {
     "QuickCBuild", "QuickCRun", "QuickCBR", "QuickCDebug",
     "QuickCMake", "QuickCMakeRun",
     "QuickCCompileDB", "QuickCCompileDBGen", "QuickCCompileDBUse",
+    "QuickCQuickfix",
   },
   config = function()
     require("quick-c").setup()
@@ -123,10 +126,12 @@ use({
     { "<leader>cqR", desc = "Quick-c: Build & Run" },
     { "<leader>cqD", desc = "Quick-c: Debug" },
     { "<leader>cqM", desc = "Quick-c: Make targets (Telescope)" },
+    { "<leader>cqS", desc = "Quick-c: Select sources (Telescope)" },
+    { "<leader>cqf", desc = "Quick-c: Open quickfix (Telescope)" },
   },
   cmd = {
     "QuickCBuild", "QuickCRun", "QuickCBR", "QuickCDebug",
-    "QuickCMake", "QuickCMakeRun",
+    "QuickCMake", "QuickCMakeRun", "QuickCQuickfix",
   },
   config = function()
     require("quick-c").setup({
@@ -259,6 +264,7 @@ require("quick-c").setup({
  - `:QuickCCompileDB` 按配置 `compile_commands.mode` 执行（generate/use）
 - `:QuickCCompileDBGen` 强制生成 `compile_commands.json` 到配置的 `outdir`
 - `:QuickCCompileDBUse` 从 `compile_commands.use_path` 复制到配置的 `outdir`
+- `:QuickCQuickfix` 打开 quickfix 列表（优先 Telescope，无则 `:copen`）
 
 多文件支持（命令接受文件参数，支持路径补全）：
 
@@ -271,6 +277,28 @@ require("quick-c").setup({
 快捷键补充：
 
 - `<leader>cqS` → 打开源文件选择器（Telescope，多选后可构建/运行）。
+- `<leader>cqf` → 打开 quickfix 列表（优先 Telescope）
+
+### 诊断与快速跳转（quickfix / Telescope）
+
+- 构建时会解析 gcc/clang/MSVC 输出为 quickfix 项，支持错误与警告。
+- 满足触发条件时自动打开列表并跳转到第一条；默认仅有错误时打开/跳转。
+- 如已安装 Telescope，默认使用 `:Telescope quickfix` 打开（可在配置关闭）。
+
+配置示例：
+
+```lua
+require('quick-c').setup({
+  diagnostics = {
+    quickfix = {
+      enabled = true,
+      open = 'warning',   -- always | error | warning | never
+      jump = 'warning',   -- always | error | warning | never
+      use_telescope = true,
+    },
+  },
+})
+```
 
 默认快捷键（普通模式）：
 
@@ -279,6 +307,8 @@ require("quick-c").setup({
 - `<leader>cqR` → 构建并运行
 - `<leader>cqD` → 调试
 - `<leader>cqM` → 打开 Make 目标选择器（Telescope）
+- `<leader>cqS` → 打开源文件选择器（Telescope）
+- `<leader>cqf` → 打开 quickfix 列表（Telescope）
 
 提示：
 - 以上键位均可通过 `setup({ keymaps = { ... } })` 自定义或禁用。

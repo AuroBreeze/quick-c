@@ -34,6 +34,14 @@ C.defaults = {
     windows = { command = "powershell", args = function(exe) return { "-NoExit", "-Command", string.format("& '%s'", exe) } end },
     unix = { command = nil, args = function(exe) return { exe } end },
   },
+  diagnostics = {
+    quickfix = {
+      enabled = true,      -- 是否收集编译输出到 quickfix
+      open = 'error',      -- 'always' | 'error' | 'warning' | 'never'
+      jump = 'error',      -- 'always' | 'error' | 'warning' | 'never'
+      use_telescope = true,-- 打开列表时优先使用 Telescope quickfix（如已安装）
+    },
+  },
   autorun = {
     enabled = false,
     events = { "BufWritePost" },
@@ -83,6 +91,7 @@ C.defaults = {
     debug = "<leader>cqD",
     make = "<leader>cqM",
     sources = "<leader>cqS",
+    quickfix = "<leader>cqf",
   },
 }
 

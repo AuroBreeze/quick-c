@@ -24,6 +24,17 @@ function K.setup(config, callbacks)
     end
     map(km.sources, sources_picker, "Quick-c: Select sources (Telescope)")
   end
+  if km.quickfix then
+    local function open_quickfix()
+      local cfg = config.diagnostics and config.diagnostics.quickfix or {}
+      if cfg.use_telescope then
+        local ok, tb = pcall(require, 'telescope.builtin')
+        if ok then tb.quickfix(); return end
+      end
+      vim.cmd('copen')
+    end
+    map(km.quickfix, open_quickfix, "Quick-c: Open quickfix list (Telescope)")
+  end
 end
 
 return K

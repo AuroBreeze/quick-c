@@ -25,6 +25,11 @@
 
 # Quick-c
 
+> [!IMPORTANT]
+> This document is not synchronized with the Chinese document and may lag behind the Chinese document.
+>
+> I would be very grateful if you could translate or correct errors in this document.
+
 Lightweight Neovim plugin for C/C++: build, run, and debug the current file in one key. Works on Windows/Linux/macOS. Integrates with BetterTerm and the built-in terminal. Fully async.
 
 ## ✨ Features
@@ -33,8 +38,11 @@ Lightweight Neovim plugin for C/C++: build, run, and debug the current file in o
  - 🐞 Debug integration: `QuickCDebug` via `nvim-dap` and `codelldb`
  - 🌐 Cross-platform: auto select compiler (gcc/clang/cl) and runtime (PowerShell/terminal)
  - 📁 Flexible output dir: default to source folder; configurable
- - 🔧 Make integration: Telescope pickers for Make targets, custom args with cache
- - 📚 compile_commands.json: generate or use an external one for clangd
+ - 🔧 Make integration: auto discover Makefiles, list targets, .PHONY prioritization, argument input with remember
+  - 🧭 More robust parsing: fallback to `-pn` if `-qp` yields nothing; support Windows-style paths in targets
+  - 🧪 If `prefer` points to a non-executable program, use an available make (make/mingw32-make/nmake) only for parsing; still run with your `prefer`
+- 🔭 Telescope: Makefile preview, multi-select sources, quick toggle .PHONY
+or use an external one for clangd
  - ⌨️ Keymaps included and non-invasive (unique=true)
 
 ## 🚀 Quick Start
@@ -76,9 +84,14 @@ If the current buffer is unnamed and modified, auto-jump from diagnostics is ski
 ## ⌨️ Commands
 
 - `:QuickCBuild`, `:QuickCRun`, `:QuickCBR`, `:QuickCDebug`
-- `:QuickCMake`, `:QuickCMakeRun [target]`
-- `:QuickCCompileDB`, `:QuickCCompileDBGen`, `:QuickCCompileDBUse`
-- `:QuickCQuickfix` open quickfix (Telescope if available)
+- `QuickCMake` – choose Make directory and targets
+- `QuickCMakeRun [target]` – run a specific target directly
+- `QuickCMakeCmd` – prompt a full custom command (pre-filled `<prefer> -C <cwd>`), send to terminal
+- `QuickCCompileDB` / `QuickCCompileDBGen` / `QuickCCompileDBUse`
+- `QuickCQuickfix` – open quickfix (prefer Telescope)
+- `QuickCCheck` – validate configuration (types/paths/executables) and show a report
+- `:QuickCReload` recompute defaults+user+project configuration
+- `:QuickCConfig` print effective configuration and detected project config path
 
 ## ⌨️ Keymaps (normal mode)
 
@@ -98,6 +111,111 @@ If the current buffer is unnamed and modified, auto-jump from diagnostics is ski
 - If current buffer is unnamed and modified, auto-jump is skipped to avoid save prompts
 
 ## ⚙️ Configuration
+
+Quick-c supports multi-level configuration with priority from high to low:
+1. Project-level configuration (`.quick-c.json`) - overrides global config
+2. User configuration (`setup()` parameters) - user customizations
+3. Default configuration - plugin built-in defaults
+
+### Project-level Configuration File
+
+Create a `.quick-c.json` file in your project root directory to customize configuration for specific projects, overriding global settings. The plugin automatically detects and applies project configuration when available.
+
+**Configuration file lookup rules:**
+- Only search in the current working directory (`:pwd`, project root)
+- File name is fixed to `.quick-c.json`
+- On directory change (`DirChanged`), configuration is auto reloaded (with 400ms debounce)
+
+**Configuration format:**
+- JSON format
+- Same structure as Lua configuration
+- Support all configuration options
+
+more details in [GUIDE](markdown/en/PROJECT_CONFIG_GUIDE.en.md).
+
+Notes:
+- With `make.prefer_force = true`:
+  - If `prefer` is not executable, parsing will only warn and try an available make to discover targets;
+  - Running still uses your `prefer` to build the command (combine with `QuickCMakeCmd` for full control).
+- Parsing fallback: try `-pn` when `-qp` returns nothing.
+
+Example `.quick-c.json` (annotated):
+```jsonc
+{
+  // Output directory: "source" means write to the same folder as the source file; custom path is supported
+  "outdir": "build",
+
+  // Toolchain priority (per platform, per language); picks the first executable
+  "toolchain": {
+    "windows": { "c": ["gcc", "cl"], "cpp": ["g++", "cl"] },
+    "unix":    { "c": ["gcc", "clang"], "cpp": ["g++", "clang++"] }
+  },
+
+  // compile_commands.json for LSP (e.g., clangd)
+  "compile_commands": {
+    "mode": "generate",     // generate | use
+    "outdir": "build"        // where to write; "source" writes to the source file's directory
+    // "use_path": "./compile_commands.json" // when mode = use, copy from this path
+  },
+
+  // Diagnostics collection into quickfix
+  "diagnostics": {
+    "quickfix": {
+      "open": "warning",      // always | error | warning | never
+      "jump": "warning",      // always | error | warning | never
+      "use_telescope": true    // prefer Telescope quickfix if available
+    }
+  },
+
+  // Make settings
+  "make": {
+    // Preferred make program: string or list; on Windows often ["make", "mingw32-make"]
+    "prefer": ["make", "mingw32-make"],
+    // Force using the preferred value even if not found in PATH or file missing
+    // e.g., { "prefer": "make", "prefer_force": true }
+    "prefer_force": false,
+    // Optional wrapper (planned): run via WSL on Windows, e.g., "wsl"
+    // "wrapper": "wsl",
+
+    // Fixed working directory used for -C
+    // Note: the directory must exist; otherwise it falls back to the start dir with a warning
+    // If it has no Makefile, the plugin will search downward within this directory (depth = search.down)
+    "cwd": ".",
+
+    // Search strategy (used when cwd is not set, or cwd requires searching within it)
+    "search": {
+      "up": 2,                       // go up at most this many levels (bounded by :pwd)
+      "down": 3,                     // per-level downward recursion depth
+      "ignore_dirs": [".git", "node_modules", ".cache"] // directories to skip
+      // Enhancement: even for ignored dirs, perform a one-level probe; if a Makefile exists at the root, include it
+    },
+
+    // Telescope display
+    "telescope": { "prompt_title": "Project Build Targets" },
+
+    // Target cache: reuse results within TTL when Makefile unchanged under the same cwd
+    "cache": { "ttl": 10 },
+
+    // Extra make args (e.g., -j4 VAR=1), remember last input per cwd
+    "args": { "prompt": true, "default": "-j4", "remember": true }
+  },
+
+  // Default keymaps (customizable/disable-able); injected only when keymaps.enabled != false
+  "keymaps": {
+    "build": "<leader>cb",
+    "run": "<leader>cr",
+    "build_and_run": "<leader>cR",
+    "debug": "<leader>cD",
+    "make": "<leader>cM",
+    "sources": "<leader>cS",
+    "quickfix": "<leader>cf"
+    // When you change/disable a key, old default mappings are automatically unmapped by default
+    // Set `unmap_defaults = false` to keep them
+  }
+}
+```
+
+### User Configuration
 
 Minimal example:
 
@@ -180,8 +298,9 @@ require('quick-c').setup({
   },
   cmd = {
     "QuickCBuild", "QuickCRun", "QuickCBR", "QuickCDebug",
-    "QuickCMake", "QuickCMakeRun", "QuickCCompileDB",
-    "QuickCCompileDBGen", "QuickCCompileDBUse", "QuickCQuickfix",
+    "QuickCMake", "QuickCMakeRun", "QuickCMakeCmd",
+    "QuickCCompileDB", "QuickCCompileDBGen", "QuickCCompileDBUse",
+    "QuickCQuickfix", "QuickCCheck",
   },
   config = function()
     require("quick-c").setup()
@@ -202,7 +321,7 @@ use({
 
 ## 📚 Telescope preview notes
 
-- Both directory and target pickers include a Makefile preview.
+- Both directory and target pickers include a Makefile preview with improved Windows path compatibility.
 - In the target picker, the preview is fixed to the Makefile in the selected directory (no live refresh for performance).
 - Large files are truncated by bytes/lines; controlled by:
   - `make.telescope.preview`
@@ -225,6 +344,9 @@ use({
   - For each level, recursively downward up to `search.down` (default 3)
   - The first directory containing `Makefile`/`makefile`/`GNUmakefile` is used as cwd
   - Directories in `ignore_dirs` are skipped (default: `.git`, `node_modules`, `.cache`)
+  - Enhancement: for ignored directories, perform a one-level probe (no recursion). If a Makefile exists at the root of that ignored directory, include it as a candidate
+
+When multiple results are found, Telescope shows paths relative to `:pwd` for clarity (e.g., `./build`, `./sub/dir`).
 
 ## 🛠️ Architecture
 

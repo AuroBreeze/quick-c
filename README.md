@@ -27,6 +27,10 @@
 
 一个面向 C/C++ 的轻量 Neovim 插件：一键编译、运行与调试当前文件，支持 Windows、Linux、macOS，兼容 betterTerm 与内置终端。构建与运行全程异步，不会阻塞 Neovim 主线程。
 
+<a href="https://dotfyle.com/plugins/AuroBreeze/quick-c">
+  <img src="https://dotfyle.com/plugins/AuroBreeze/quick-c/shield" />
+</a>
+
 ## ✨ 特性
 
  - 🚀 **一键构建/运行（异步）**：`QuickCBuild`、`QuickCRun`、`QuickCBR`（构建并运行）
@@ -35,9 +39,16 @@
  - 📁 **灵活输出位置**：默认将可执行文件输出到源码所在目录；可通过配置修改
  - 🔌 **终端兼容**：优先将命令发送到 `betterTerm`（如已安装），否则使用 Neovim 内置终端
  
- - 🔧 **Make 集成（异步）**：自动解析 `make -qp` 目标，Telescope 选择执行（如 `clean`、`install`）
- - ⌨️ **便捷快捷键**：默认提供 `<leader>cqb`、`<leader>cqr`、`<leader>cqR`、`<leader>cqD`、`<leader>cqM`
- - 📚 **LSP 集成（compile_commands.json）**：一键为当前文件目录生成或使用指定 `compile_commands.json` 供 clangd 等 LSP 使用
+ - 🔧 **Make 集成**：自动发现 Makefile、列出目标、`.PHONY` 优先、参数输入与记忆
+  - 🧭 目标解析更稳健：`-qp` 无结果时回退 `-pn`；Windows 兼容路径样式目标
+  - 🧪 不可执行 `prefer` 时，解析阶段自动用可用 make（`make`/`mingw32-make`/`nmake`）探测；运行仍按你的 `prefer`
+- 🔭 **Telescope 增强**：内置 Makefile 预览、源文件多选、快捷切换 .PHONY
+- 🖥️ **BetterTerm/内置终端**：自动选择/复用终端、跨平台兼容
+- 📦 **多文件构建**：支持一次构建/运行多个源文件
+- 📝 **自定义命令**：`QuickCMakeCmd` 自定义完整命令（预填 `<prefer> -C <cwd>`，可编辑后发送到终端）
+- ✅ **配置检查**：`QuickCCheck` 检查配置（类型/路径/可执行性）并输出报告
+- 🧠 **LSP 集成**：一键为当前文件目录生成或使用指定 `compile_commands.json` 供 clangd 等 LSP 使用
+- 🔎 **快速跳转**：构建时自动解析错误与警告，支持 Telescope 快速跳转
 
 ## 📦 依赖
 
@@ -76,9 +87,9 @@
   -- 3) 命令触发（调用命令时加载，等同“命令提前加载”）
   cmd = {
     "QuickCBuild", "QuickCRun", "QuickCBR", "QuickCDebug",
-    "QuickCMake", "QuickCMakeRun",
+    "QuickCMake", "QuickCMakeRun", "QuickCMakeCmd",
     "QuickCCompileDB", "QuickCCompileDBGen", "QuickCCompileDBUse",
-    "QuickCQuickfix",
+    "QuickCQuickfix", "QuickCCheck",
   },
   config = function()
     require("quick-c").setup()
@@ -135,8 +146,12 @@ use({
 - 命令：
   - `QuickCBuild`/`QuickCRun`/`QuickCBR`/`QuickCDebug`
   - `QuickCMake`/`QuickCMakeRun [target]`
+  - `QuickCMakeCmd`：自定义完整命令（预填 `<prefer> -C <cwd>`，可编辑后发送到终端）
   - `QuickCCompileDB`/`QuickCCompileDBGen`/`QuickCCompileDBUse`
-  - `QuickCQuickfix`（打开 quickfix，优先 Telescope）
+  - `QuickCQuickfix`：打开 quickfix（优先 Telescope）
+  - `QuickCCheck`：检查配置（类型/路径/可执行性）并输出报告
+  - `QuickCReload`：重新计算默认+用户+项目配置
+  - `QuickCConfig`：打印生效配置与项目配置路径
 
 - 默认键位（普通模式）：
   - `<leader>cqb` 构建
@@ -148,6 +163,41 @@ use({
   - `<leader>cqf` 打开 quickfix（Telescope）
 
 ## ⚙️ 配置
+
+Quick-c 支持多级配置，优先级从高到低为：
+1. 项目级配置（`.quick-c.json`） - 覆盖全局配置
+2. 用户配置（`setup()` 参数） - 用户自定义配置
+3. 默认配置 - 插件内置默认值
+
+### 项目级配置文件
+
+在项目根目录创建 `.quick-c.json` 文件，可以为特定项目定制配置，覆盖全局配置。当插件检测到项目配置文件时，会自动加载并应用配置。
+
+**配置文件查找规则：**
+- 仅在当前工作目录（`:pwd`，项目根）查找
+- 文件名固定为 `.quick-c.json`
+- 如切换目录（`DirChanged`），会自动重新载入（含 400ms 防抖）
+
+**配置格式：**
+- 使用 JSON 格式
+- 配置结构与 Lua 配置相同
+- 支持所有配置选项
+
+**配置生效时机：**
+- 插件初始化时自动检测并加载
+- 切换不同项目（`:cd` 改变 `:pwd`）时自动应用（400ms 防抖）
+- 使用命令 `:QuickCReload` 手动重载
+- 使用命令 `:QuickCConfig` 查看“生效配置”和检测到的项目配置路径
+
+
+具体指导：[GUIDE](markdown/cn/PROJECT_CONFIG_GUIDE.md)
+
+补充说明：
+- `make.prefer_force = true` 时：
+  - 解析阶段若 `prefer` 不可执行，仅提示 Warning，并尝试用可用的 make 探测目标；
+  - 运行阶段仍按你的 `prefer` 构造命令并发送到终端（可配合 `QuickCMakeCmd` 全自定义）。
+- 解析阶段回退策略：`-qp` 无结果时使用 `-pn` 再试。
+### 用户配置
 
 最小示例（仅常用项）：
 
@@ -243,6 +293,10 @@ require("quick-c").setup({
         --   - 可为字符串或列表；按顺序探测可执行：
         --     prefer = 'make' 或 prefer = { 'make', 'mingw32-make' }
         --   - Windows 常见：{ 'make', 'mingw32-make' }
+
+        -- 强制使用不存在的 make 命令
+        prefer_force = false, -- 强制使用不可执行的 prefer（解析阶段仅告警，运行阶段仍使用 prefer）
+
         prefer = nil,
         -- 固定工作目录（不设置则由插件根据当前文件自动搜索）
         cwd = nil,
@@ -367,7 +421,7 @@ require('quick-c').setup({
 
 ### 📚 Telescope 预览说明
 
-- 目录选择器与目标选择器均内置 Makefile 预览。
+- 目录选择器与目标选择器均内置 Makefile 预览，Windows 路径兼容更好。
 - 目标选择器阶段，预览固定显示已选目录中的 Makefile，不随光标移动刷新（避免卡顿）。
 - 对大文件自动截断，受以下配置项控制：
   - `make.telescope.preview`：是否启用预览。
@@ -390,6 +444,9 @@ require('quick-c').setup({
   - 在每一层向下递归至多 `search.down` 层（默认 3 层）
   - 找到包含 `Makefile`/`makefile`/`GNUmakefile` 的首个目录作为工作目录
   - 会跳过 `ignore_dirs` 名单中的目录（默认：`.git`、`node_modules`、`.cache`）
+  - 增强：对被忽略目录进行“第一层探测”（不递归），若该目录根下存在 Makefile，则也纳入候选
+
+多结果时，Telescope 列表显示相对于 `:pwd` 的相对路径，便于识别（如 `./build`、`./sub/dir`）。
 
 ## 🛠️ 架构说明
 

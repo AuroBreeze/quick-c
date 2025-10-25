@@ -1,21 +1,35 @@
+    -- Validate configuration (global + project)
+    vim.api.nvim_create_user_command("QuickCCheck", function()
+        local ok_v, V = pcall(require, 'quick-c.config_validate')
+        if not ok_v then
+            vim.notify('Quick-c: config_validate module not found', vim.log.levels.ERROR)
+            return
+        end
+        V.run_and_notify(M.config)
+    end, {})
 local M = {}
 local T = require('quick-c.terminal')
 local U = require('quick-c.util')
 local MS = require('quick-c.make_search')
 local MK = require('quick-c.make')
 local CFG = require('quick-c.config')
+local PROJECT_CONFIG = require('quick-c.project_config')
 
 M.config = CFG.defaults
+M.user_opts = {}
+M._last_project_config_path = nil
+M._reload_timer = nil
+M._suppress_notice_until = 0 -- uv.now() deadline in ms
 
 local function is_windows() return U.is_windows() end
 
 -- 异步非阻塞 Makefile 搜索：分批扫描目录，避免卡主线程
 local function find_make_root_async(start_dir, cb)
-  return MS.find_make_root_async(M.config, start_dir, cb)
+    return MS.find_make_root_async(M.config, start_dir, cb)
 end
 
 local function choose_make()
-  return MK.choose_make(M.config)
+    return MK.choose_make(M.config)
 end
 
 local function is_powershell() return U.is_powershell() end
@@ -27,151 +41,277 @@ local function notify_warn(msg) U.notify_warn(msg) end
 
 -- quick-py like terminal helpers
 local function run_in_native_terminal(cmd)
-  return T.run_in_native_terminal(M.config, is_windows, cmd)
+    return T.run_in_native_terminal(M.config, is_windows, cmd)
 end
 
 local function run_in_betterterm(cmd)
-  return T.run_in_betterterm(M.config, is_windows, cmd, notify_warn, notify_err)
+    return T.run_in_betterterm(M.config, is_windows, cmd, notify_warn, notify_err)
 end
 
 -- Make/Telescope helpers
 local function run_make_in_terminal(cmdline)
-  return T.select_or_run_in_terminal(M.config, is_windows, cmdline, notify_warn, notify_err)
+    return T.select_or_run_in_terminal(M.config, is_windows, cmdline, notify_warn, notify_err)
 end
 
 local function shell_quote_path(p)
-  return U.shell_quote_path(p)
+    return U.shell_quote_path(p)
 end
 
 
 
 local function resolve_make_cwd_async(base, cb)
-  return MS.resolve_make_cwd_async(M.config, base, cb)
+    return MS.resolve_make_cwd_async(M.config, base, cb)
 end
 
 local function parse_make_targets_in_cwd_async(cwd, cb)
-  return MK.parse_make_targets_in_cwd_async(M.config, cwd, cb)
+    return MK.parse_make_targets_in_cwd_async(M.config, cwd, cb)
 end
 
 local function make_run_target(target)
-  local prog = choose_make()
-  if not prog then
-    notify_err("未找到 make 或 mingw32-make")
-    return
-  end
-  local base = (M.config.make and M.config.make.cwd) or vim.fn.fnamemodify(vim.fn.expand("%:p"), ":h")
-  resolve_make_cwd_async(base, function(cwd)
-    local cmd = string.format("%s -C %s %s", prog, shell_quote_path(cwd), target or "")
-    run_make_in_terminal(cmd)
-  end)
+    local prog = choose_make()
+    if not prog then
+        notify_err("未找到 make 或 mingw32-make")
+        return
+    end
+    local base = vim.fn.fnamemodify(vim.fn.expand("%:p"), ":h")
+    resolve_make_cwd_async(base, function(cwd)
+        local mkargs = (M.config.make and M.config.make.args) or {}
+        if mkargs.prompt ~= false then
+            local def = mkargs.default or ""
+            local key = cwd or "" -- simple remember per-cwd in vim.g
+            vim.g.quick_c_make_last_args = vim.g.quick_c_make_last_args or {}
+            if mkargs.remember ~= false then
+                def = vim.g.quick_c_make_last_args[key] or def
+            end
+            local ui = vim.ui or {}
+            if ui.input then
+                ui.input({ prompt = 'make 参数: ', default = def }, function(arg)
+                    if mkargs.remember ~= false and arg and arg ~= '' then
+                        vim.g.quick_c_make_last_args[key] = arg
+                    end
+                    local extra = (arg and arg ~= '') and (' ' .. arg) or ''
+                    local cmd = string.format("%s -C %s %s%s", prog, shell_quote_path(cwd), target or '', extra)
+                    run_make_in_terminal(cmd)
+                end)
+                return
+            end
+        end
+        local cmd = string.format("%s -C %s %s", prog, shell_quote_path(cwd), target or "")
+        run_make_in_terminal(cmd)
+    end)
 end
 
 -- 已知 cwd 时，直接运行目标，避免再次弹出目录选择
 local function make_run_in_cwd(target, cwd)
-  return MK.make_run_in_cwd(M.config, cwd, target, function(cmd)
-    run_make_in_terminal(cmd)
-  end)
+    return MK.make_run_in_cwd(M.config, cwd, target, function(cmd)
+        run_make_in_terminal(cmd)
+    end)
+end
+
+-- Custom make command: resolve cwd, then prompt a full command line for user to edit
+local function make_run_custom_cmd()
+    local prog = choose_make() or 'make'
+    local base = vim.fn.fnamemodify(vim.fn.expand('%:p'), ':h')
+    resolve_make_cwd_async(base, function(cwd)
+        local def = string.format('%s -C %s ', prog, shell_quote_path(cwd))
+        local ui = vim.ui or {}
+        if not ui.input then
+            run_make_in_terminal(def)
+            return
+        end
+        ui.input({ prompt = '运行命令: ', default = def }, function(cmd)
+            if not cmd or cmd == '' then return end
+            run_make_in_terminal(cmd)
+        end)
+    end)
 end
 
 local function telescope_make()
-  local ok, mod = pcall(require, 'quick-c.telescope')
-  if not ok then
-    notify_err('无法加载 quick-c.telescope 模块')
-    return
-  end
-  mod.telescope_make(
-    M.config,
-    resolve_make_cwd_async,
-    parse_make_targets_in_cwd_async,
-    make_run_in_cwd,
-    choose_make,
-    shell_quote_path,
-    run_make_in_terminal
-  )
+    local ok, mod = pcall(require, 'quick-c.telescope')
+    if not ok then
+        notify_err('无法加载 quick-c.telescope 模块')
+        return
+    end
+    mod.telescope_make(
+        M.config,
+        resolve_make_cwd_async,
+        parse_make_targets_in_cwd_async,
+        make_run_in_cwd,
+        choose_make,
+        shell_quote_path,
+        run_make_in_terminal
+    )
 end
 
-local function build(...) require('quick-c.build').build(M.config, { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
-local function run(...) require('quick-c.build').run(M.config, { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
-local function build_and_run(...) require('quick-c.build').build_and_run(M.config, { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
-local function debug_run(...) require('quick-c.build').debug_run(M.config, { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
+local function build(...) require('quick-c.build').build(M.config,
+        { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
+local function run(...) require('quick-c.build').run(M.config,
+        { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
+local function build_and_run(...) require('quick-c.build').build_and_run(M.config,
+        { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
+local function debug_run(...) require('quick-c.build').debug_run(M.config,
+        { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
 local function cc_apply()
-  require('quick-c.cc').apply(M.config, { err = notify_err, warn = notify_warn, info = notify_info })
+    require('quick-c.cc').apply(M.config, { err = notify_err, warn = notify_warn, info = notify_info })
 end
 local function cc_generate()
-  local cfg = M.config
-  cfg.compile_commands = cfg.compile_commands or {}
-  cfg.compile_commands.mode = 'generate'
-  require('quick-c.cc').generate(cfg, { err = notify_err, warn = notify_warn, info = notify_info })
+    local cfg = M.config
+    cfg.compile_commands = cfg.compile_commands or {}
+    cfg.compile_commands.mode = 'generate'
+    require('quick-c.cc').generate(cfg, { err = notify_err, warn = notify_warn, info = notify_info })
 end
 local function cc_use()
-  local cfg = M.config
-  cfg.compile_commands = cfg.compile_commands or {}
-  cfg.compile_commands.mode = 'use'
-  require('quick-c.cc').use_external(cfg, { err = notify_err, warn = notify_warn, info = notify_info })
+    local cfg = M.config
+    cfg.compile_commands = cfg.compile_commands or {}
+    cfg.compile_commands.mode = 'use'
+    require('quick-c.cc').use_external(cfg, { err = notify_err, warn = notify_warn, info = notify_info })
+end
+
+local function recompute_config()
+    M.config = vim.tbl_deep_extend("force", CFG.defaults, M.user_opts or {})
+    local merged_config = PROJECT_CONFIG.setup(M.config)
+    if merged_config then
+        M.config = merged_config
+        local root = vim.fn.getcwd()
+        local p = PROJECT_CONFIG.find_project_config(root)
+        local now = (vim.loop and vim.loop.now and vim.loop.now()) or 0
+        if p and p ~= M._last_project_config_path then
+            if now >= (M._suppress_notice_until or 0) then
+                U.notify_info("已加载项目配置文件 (.quick-c.json)")
+            end
+            M._last_project_config_path = p
+        end
+    else
+        M._last_project_config_path = nil
+    end
 end
 
 function M.setup(opts)
-  M.config = vim.tbl_deep_extend("force", M.config, opts or {})
-  vim.api.nvim_create_user_command("QuickCBuild", function(opts)
-    local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
-    if sources then
-      build({ sources = sources })
-    else
-      build()
-    end
-  end, { nargs = "*", complete = "file" })
-  vim.api.nvim_create_user_command("QuickCRun", function(opts)
-    local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
-    if sources then
-      run({ sources = sources })
-    else
-      run()
-    end
-  end, { nargs = "*", complete = "file" })
-  vim.api.nvim_create_user_command("QuickCBR", function(opts)
-    local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
-    if sources then
-      build_and_run({ sources = sources })
-    else
-      build_and_run()
-    end
-  end, { nargs = "*", complete = "file" })
-  vim.api.nvim_create_user_command("QuickCDebug", function()
-    debug_run()
-  end, {})
-  vim.api.nvim_create_user_command("QuickCCompileDB", function()
-    cc_apply()
-  end, {})
-  vim.api.nvim_create_user_command("QuickCCompileDBGen", function()
-    cc_generate()
-  end, {})
-  vim.api.nvim_create_user_command("QuickCCompileDBUse", function()
-    cc_use()
-  end, {})
-  vim.api.nvim_create_user_command("QuickCQuickfix", function()
-    local cfg = M.config.diagnostics and M.config.diagnostics.quickfix or {}
-    if cfg.use_telescope then
-      local ok, tb = pcall(require, 'telescope.builtin')
-      if ok then tb.quickfix(); return end
-    end
-    vim.cmd('copen')
-  end, {})
-  vim.api.nvim_create_user_command("QuickCMake", function()
-    telescope_make()
-  end, {})
-  vim.api.nvim_create_user_command("QuickCMakeRun", function(opts)
-    local target = table.concat(opts.fargs or {}, " ")
-    make_run_target(target)
-  end, { nargs = "*" })
+    M.user_opts = opts or {}
+    recompute_config()
+    vim.api.nvim_create_user_command("QuickCBuild", function(opts)
+        local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
+        if sources then
+            build({ sources = sources })
+        else
+            build()
+        end
+    end, { nargs = "*", complete = "file" })
+    vim.api.nvim_create_user_command("QuickCRun", function(opts)
+        local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
+        if sources then
+            run({ sources = sources })
+        else
+            run()
+        end
+    end, { nargs = "*", complete = "file" })
+    vim.api.nvim_create_user_command("QuickCBR", function(opts)
+        local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
+        if sources then
+            build_and_run({ sources = sources })
+        else
+            build_and_run()
+        end
+    end, { nargs = "*", complete = "file" })
+    vim.api.nvim_create_user_command("QuickCDebug", function()
+        debug_run()
+    end, {})
+    vim.api.nvim_create_user_command("QuickCCompileDB", function()
+        cc_apply()
+    end, {})
+    vim.api.nvim_create_user_command("QuickCCompileDBGen", function()
+        cc_generate()
+    end, {})
+    vim.api.nvim_create_user_command("QuickCCompileDBUse", function()
+        cc_use()
+    end, {})
+    vim.api.nvim_create_user_command("QuickCQuickfix", function()
+        local cfg = M.config.diagnostics and M.config.diagnostics.quickfix or {}
+        if cfg.use_telescope then
+            local ok, tb = pcall(require, 'telescope.builtin')
+            if ok then
+                tb.quickfix(); return
+            end
+        end
+        vim.cmd('copen')
+    end, {})
+    vim.api.nvim_create_user_command("QuickCMake", function()
+        telescope_make()
+    end, {})
+    vim.api.nvim_create_user_command("QuickCMakeRun", function(opts)
+        local target = table.concat(opts.fargs or {}, " ")
+        make_run_target(target)
+    end, { nargs = "*" })
+    vim.api.nvim_create_user_command("QuickCMakeCmd", function()
+        make_run_custom_cmd()
+    end, {})
 
-  require('quick-c.keys').setup(M.config, {
-    build = build,
-    run = run,
-    build_and_run = build_and_run,
-    debug = debug_run,
-    make = telescope_make,
-  })
+    vim.api.nvim_create_user_command("QuickCReload", function()
+        local uv = vim.loop
+        if uv and uv.now then M._suppress_notice_until = uv.now() + 1000 end
+        recompute_config()
+        vim.notify("Quick-c: Config reloaded", vim.log.levels.INFO)
+    end, {})
+
+    -- Debug: show effective config and detected project config path
+    vim.api.nvim_create_user_command("QuickCConfig", function()
+        local cfg = M.config
+        local ok, inspect = pcall(vim.inspect, cfg)
+        local lines = {}
+        table.insert(lines, "Quick-c: Effective Config")
+        table.insert(lines, ok and inspect or "<inspect failed>")
+        local root = vim.fn.getcwd()
+        local p = PROJECT_CONFIG.find_project_config(root)
+        table.insert(lines, "Project root: " .. root)
+        table.insert(lines, "Project config: " .. (p or "<not found>"))
+        vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+    end, {})
+
+    local function schedule_recompute(ms)
+        local uv = vim.loop
+        if not M._reload_timer or M._reload_timer:is_closing() then
+            M._reload_timer = uv.new_timer()
+        end
+        local t = M._reload_timer
+        t:stop()
+        t:start(ms or 400, 0, function()
+            vim.schedule(function()
+                pcall(recompute_config)
+            end)
+        end)
+    end
+
+    local ok_grp, grp = pcall(vim.api.nvim_create_augroup, 'QuickC_Autocmds', { clear = true })
+    if not ok_grp then grp = nil end
+    pcall(vim.api.nvim_create_autocmd, 'DirChanged', { group = grp, callback = function()
+        schedule_recompute(400)
+    end })
+
+    -- Auto-reload when saving project config in current root
+    pcall(vim.api.nvim_create_autocmd, 'BufWritePost', {
+        group = grp,
+        pattern = '.quick-c.json',
+        callback = function(args)
+            local saved = vim.fn.fnamemodify(args.file or '', ':p')
+            local expect = vim.fn.fnamemodify(U.join(vim.fn.getcwd(), '.quick-c.json'), ':p')
+            if saved == expect then
+                local uv = vim.loop
+                if uv and uv.now then M._suppress_notice_until = uv.now() + 1000 end
+                schedule_recompute(100)
+                vim.schedule(function()
+                    vim.notify('Quick-c: 项目配置已保存，已重新加载', vim.log.levels.INFO)
+                end)
+            end
+        end,
+    })
+
+    require('quick-c.keys').setup(M.config, {
+        build = build,
+        run = run,
+        build_and_run = build_and_run,
+        debug = debug_run,
+        make = telescope_make,
+    })
 end
 
 return M
-

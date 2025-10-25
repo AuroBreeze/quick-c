@@ -38,8 +38,11 @@ Lightweight Neovim plugin for C/C++: build, run, and debug the current file in o
  - 🐞 Debug integration: `QuickCDebug` via `nvim-dap` and `codelldb`
  - 🌐 Cross-platform: auto select compiler (gcc/clang/cl) and runtime (PowerShell/terminal)
  - 📁 Flexible output dir: default to source folder; configurable
- - 🔧 Make integration: Telescope pickers for Make targets, custom args with cache
- - 📚 compile_commands.json: generate or use an external one for clangd
+ - 🔧 Make integration: auto discover Makefiles, list targets, .PHONY prioritization, argument input with remember
+  - 🧭 More robust parsing: fallback to `-pn` if `-qp` yields nothing; support Windows-style paths in targets
+  - 🧪 If `prefer` points to a non-executable program, use an available make (make/mingw32-make/nmake) only for parsing; still run with your `prefer`
+- 🔭 Telescope: Makefile preview, multi-select sources, quick toggle .PHONY
+or use an external one for clangd
  - ⌨️ Keymaps included and non-invasive (unique=true)
 
 ## 🚀 Quick Start
@@ -81,9 +84,12 @@ If the current buffer is unnamed and modified, auto-jump from diagnostics is ski
 ## ⌨️ Commands
 
 - `:QuickCBuild`, `:QuickCRun`, `:QuickCBR`, `:QuickCDebug`
-- `:QuickCMake`, `:QuickCMakeRun [target]`
-- `:QuickCCompileDB`, `:QuickCCompileDBGen`, `:QuickCCompileDBUse`
-- `:QuickCQuickfix` open quickfix (Telescope if available)
+- `QuickCMake` – choose Make directory and targets
+- `QuickCMakeRun [target]` – run a specific target directly
+- `QuickCMakeCmd` – prompt a full custom command (pre-filled `<prefer> -C <cwd>`), send to terminal
+- `QuickCCompileDB` / `QuickCCompileDBGen` / `QuickCCompileDBUse`
+- `QuickCQuickfix` – open quickfix (prefer Telescope)
+- `QuickCCheck` – validate configuration (types/paths/executables) and show a report
 - `:QuickCReload` recompute defaults+user+project configuration
 - `:QuickCConfig` print effective configuration and detected project config path
 
@@ -126,6 +132,12 @@ Create a `.quick-c.json` file in your project root directory to customize config
 - Support all configuration options
 
 more details in [GUIDE](markdown/en/PROJECT_CONFIG_GUIDE.en.md).
+
+Notes:
+- With `make.prefer_force = true`:
+  - If `prefer` is not executable, parsing will only warn and try an available make to discover targets;
+  - Running still uses your `prefer` to build the command (combine with `QuickCMakeCmd` for full control).
+- Parsing fallback: try `-pn` when `-qp` returns nothing.
 
 Example `.quick-c.json` (annotated):
 ```jsonc
@@ -197,6 +209,8 @@ Example `.quick-c.json` (annotated):
     "make": "<leader>cM",
     "sources": "<leader>cS",
     "quickfix": "<leader>cf"
+    // When you change/disable a key, old default mappings are automatically unmapped by default
+    // Set `unmap_defaults = false` to keep them
   }
 }
 ```
@@ -284,8 +298,9 @@ require('quick-c').setup({
   },
   cmd = {
     "QuickCBuild", "QuickCRun", "QuickCBR", "QuickCDebug",
-    "QuickCMake", "QuickCMakeRun", "QuickCCompileDB",
-    "QuickCCompileDBGen", "QuickCCompileDBUse", "QuickCQuickfix",
+    "QuickCMake", "QuickCMakeRun", "QuickCMakeCmd",
+    "QuickCCompileDB", "QuickCCompileDBGen", "QuickCCompileDBUse",
+    "QuickCQuickfix", "QuickCCheck",
   },
   config = function()
     require("quick-c").setup()

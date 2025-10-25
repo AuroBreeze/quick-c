@@ -39,9 +39,16 @@
  - 📁 **灵活输出位置**：默认将可执行文件输出到源码所在目录；可通过配置修改
  - 🔌 **终端兼容**：优先将命令发送到 `betterTerm`（如已安装），否则使用 Neovim 内置终端
  
- - 🔧 **Make 集成（异步）**：自动解析 `make -qp` 目标，Telescope 选择执行（如 `clean`、`install`）
- - ⌨️ **便捷快捷键**：默认提供 `<leader>cqb`、`<leader>cqr`、`<leader>cqR`、`<leader>cqD`、`<leader>cqM`
- - 📚 **LSP 集成（compile_commands.json）**：一键为当前文件目录生成或使用指定 `compile_commands.json` 供 clangd 等 LSP 使用
+ - 🔧 **Make 集成**：自动发现 Makefile、列出目标、`.PHONY` 优先、参数输入与记忆
+  - 🧭 目标解析更稳健：`-qp` 无结果时回退 `-pn`；Windows 兼容路径样式目标
+  - 🧪 不可执行 `prefer` 时，解析阶段自动用可用 make（`make`/`mingw32-make`/`nmake`）探测；运行仍按你的 `prefer`
+- 🔭 **Telescope 增强**：内置 Makefile 预览、源文件多选、快捷切换 .PHONY
+- 🖥️ **BetterTerm/内置终端**：自动选择/复用终端、跨平台兼容
+- 📦 **多文件构建**：支持一次构建/运行多个源文件
+- 📝 **自定义命令**：`QuickCMakeCmd` 自定义完整命令（预填 `<prefer> -C <cwd>`，可编辑后发送到终端）
+- ✅ **配置检查**：`QuickCCheck` 检查配置（类型/路径/可执行性）并输出报告
+- 🧠 **LSP 集成**：一键为当前文件目录生成或使用指定 `compile_commands.json` 供 clangd 等 LSP 使用
+- 🔎 **快速跳转**：构建时自动解析错误与警告，支持 Telescope 快速跳转
 
 ## 📦 依赖
 
@@ -80,9 +87,9 @@
   -- 3) 命令触发（调用命令时加载，等同“命令提前加载”）
   cmd = {
     "QuickCBuild", "QuickCRun", "QuickCBR", "QuickCDebug",
-    "QuickCMake", "QuickCMakeRun",
+    "QuickCMake", "QuickCMakeRun", "QuickCMakeCmd",
     "QuickCCompileDB", "QuickCCompileDBGen", "QuickCCompileDBUse",
-    "QuickCQuickfix",
+    "QuickCQuickfix", "QuickCCheck",
   },
   config = function()
     require("quick-c").setup()
@@ -139,10 +146,12 @@ use({
 - 命令：
   - `QuickCBuild`/`QuickCRun`/`QuickCBR`/`QuickCDebug`
   - `QuickCMake`/`QuickCMakeRun [target]`
+  - `QuickCMakeCmd`：自定义完整命令（预填 `<prefer> -C <cwd>`，可编辑后发送到终端）
   - `QuickCCompileDB`/`QuickCCompileDBGen`/`QuickCCompileDBUse`
-  - `QuickCQuickfix`（打开 quickfix，优先 Telescope）
-  - `QuickCReload`（重新计算默认+用户+项目配置）
-  - `QuickCConfig`（打印生效配置与项目配置路径）
+  - `QuickCQuickfix`：打开 quickfix（优先 Telescope）
+  - `QuickCCheck`：检查配置（类型/路径/可执行性）并输出报告
+  - `QuickCReload`：重新计算默认+用户+项目配置
+  - `QuickCConfig`：打印生效配置与项目配置路径
 
 - 默认键位（普通模式）：
   - `<leader>cqb` 构建
@@ -182,6 +191,12 @@ Quick-c 支持多级配置，优先级从高到低为：
 
 
 具体指导：[GUIDE](markdown/cn/PROJECT_CONFIG_GUIDE.md)
+
+补充说明：
+- `make.prefer_force = true` 时：
+  - 解析阶段若 `prefer` 不可执行，仅提示 Warning，并尝试用可用的 make 探测目标；
+  - 运行阶段仍按你的 `prefer` 构造命令并发送到终端（可配合 `QuickCMakeCmd` 全自定义）。
+- 解析阶段回退策略：`-qp` 无结果时使用 `-pn` 再试。
 ### 用户配置
 
 最小示例（仅常用项）：
@@ -280,7 +295,7 @@ require("quick-c").setup({
         --   - Windows 常见：{ 'make', 'mingw32-make' }
 
         -- 强制使用不存在的 make 命令
-        prefer_force = false,
+        prefer_force = false, -- 强制使用不可执行的 prefer（解析阶段仅告警，运行阶段仍使用 prefer）
 
         prefer = nil,
         -- 固定工作目录（不设置则由插件根据当前文件自动搜索）

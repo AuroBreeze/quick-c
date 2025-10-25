@@ -106,12 +106,13 @@ local function resolve_out_path(config, sources, name)
   end
 end
 
-function B.get_output_name_async(config, sources, preset_name, cb)
+function B.get_output_name_async(config, sources, preset_name, cb, default_override)
   local is_win = U.is_windows()
   if preset_name and preset_name ~= '' then cb(preset_name) return end
   if #sources == 1 then cb(default_out_name(is_win, sources)) return end
   local def = 'a.out'
   if is_win and not def:match('%.exe$') then def = def .. '.exe' end
+  if default_override and default_override ~= '' then def = default_override end
   local ui = vim.ui or {}
   if ui.input then
     ui.input({ prompt = 'Output name: ', default = def }, function(input)
@@ -139,7 +140,10 @@ function B.build(config, notify, opts)
   opts = opts or {}
   local key = sources_key(sources)
   local cached = NAME_CACHE[key]
-  B.get_output_name_async(config, sources, cached, function(name)
+  -- 对多文件：即使有缓存也弹出输入框，但默认值使用缓存
+  local preset = nil
+  local default_override = cached
+  B.get_output_name_async(config, sources, preset, function(name)
     if not cached and name and name ~= '' then NAME_CACHE[key] = name end
     local is_win = U.is_windows()
     local exe = resolve_out_path(config, sources, name)
@@ -166,7 +170,7 @@ function B.build(config, notify, opts)
       end,
     })
     if ok <= 0 then notify.err('启动编译进程失败') end
-  end)
+  end, default_override)
 end
 
 function B.run(config, notify, exe_or_opts)

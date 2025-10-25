@@ -27,19 +27,19 @@
 
 一个面向 C/C++ 的轻量 Neovim 插件：一键编译、运行与调试当前文件，支持 Windows、Linux、macOS，兼容 betterTerm 与内置终端。构建与运行全程异步，不会阻塞 Neovim 主线程。
 
-## 特性
+## ✨ 特性
 
-- **一键构建/运行（异步）**：`QuickCBuild`、`QuickCRun`、`QuickCBR`（构建并运行）
-- **调试集成**：`QuickCDebug` 使用 `nvim-dap` 与 `codelldb`
-- **跨平台**：自动选择可用编译器（gcc/clang/cl）与合适运行方式（PowerShell/终端）
-- **灵活输出位置**：默认将可执行文件输出到源码所在目录；可通过配置修改
-- **终端兼容**：优先将命令发送到 `betterTerm`（如已安装），否则使用 Neovim 内置终端
+ - 🚀 **一键构建/运行（异步）**：`QuickCBuild`、`QuickCRun`、`QuickCBR`（构建并运行）
+ - 🐞 **调试集成**：`QuickCDebug` 使用 `nvim-dap` 与 `codelldb`
+ - 🌐 **跨平台**：自动选择可用编译器（gcc/clang/cl）与合适运行方式（PowerShell/终端）
+ - 📁 **灵活输出位置**：默认将可执行文件输出到源码所在目录；可通过配置修改
+ - 🔌 **终端兼容**：优先将命令发送到 `betterTerm`（如已安装），否则使用 Neovim 内置终端
  
-- **Make 集成（异步）**：自动解析 `make -qp` 目标，Telescope 选择执行（如 `clean`、`install`）
-- **便捷快捷键**：默认提供 `<leader>cqb`、`<leader>cqr`、`<leader>cqR`、`<leader>cqD`、`<leader>cqM`
- - **LSP 集成（compile_commands.json）**：一键为当前文件目录生成或使用指定 `compile_commands.json` 供 clangd 等 LSP 使用
+ - 🔧 **Make 集成（异步）**：自动解析 `make -qp` 目标，Telescope 选择执行（如 `clean`、`install`）
+ - ⌨️ **便捷快捷键**：默认提供 `<leader>cqb`、`<leader>cqr`、`<leader>cqR`、`<leader>cqD`、`<leader>cqM`
+ - 📚 **LSP 集成（compile_commands.json）**：一键为当前文件目录生成或使用指定 `compile_commands.json` 供 clangd 等 LSP 使用
 
-## 依赖
+## 📦 依赖
 
 - Neovim 0.8+
 - 至少一种 C/C++ 编译器（按平台自动探测）：
@@ -50,7 +50,7 @@
   - 调试：[`nvim-dap`](https://github.com/mfussenegger/nvim-dap) 与 `codelldb`
   - Make 选择器：[`nvim-telescope/telescope.nvim`](https://github.com/nvim-telescope/telescope.nvim) 与 [`nvim-lua/plenary.nvim`](https://github.com/nvim-lua/plenary.nvim)
 
-## 安装
+## 🧩 安装
 
 使用 lazy.nvim（三重懒加载：按文件类型/按快捷键/按命令 任一触发即加载）：
 
@@ -70,7 +70,7 @@
     { "<leader>cqR", desc = "Quick-c: Build & Run" },
     { "<leader>cqD", desc = "Quick-c: Debug" },
     { "<leader>cqM", desc = "Quick-c: Make targets (Telescope)" },
-    { "<leader>cqS", desc = "Quick-c: Select sources (Telescope)" },
+    { "<leader>cqS", desc = "Quick-c: Select sources (Telescope)" }, -- 使用tab进行多选
     { "<leader>cqf", desc = "Quick-c: Open quickfix (Telescope)" },
   },
   -- 3) 命令触发（调用命令时加载，等同“命令提前加载”）
@@ -99,7 +99,7 @@ use({
 
 插件会通过 `plugin/quick-c.lua` 在加载时自动调用 `require('quick-c').setup()`，你也可以在自己的配置中传入自定义项覆盖默认行为。
 
-## 快速开始
+## 🚀 快速开始
 
 打开任意 `*.c` 或 `*.cpp` 文件：
 
@@ -117,7 +117,7 @@ use({
 使用 Telescope 选择多文件（推荐）：
 
 - 按 `<leader>cqS` 打开源文件选择器。
-- 在列表中按 Tab 多选（Shift+Tab 往回，多选不移动可用 Ctrl+Space）。
+- 在列表中按 `Tab` 多选（Shift+Tab 往回，多选不移动可用 Ctrl+Space）。
 - 回车后选择操作：Build / Run / Build & Run。
 
 说明：源文件列表显示为相对当前工作目录的路径，内部会使用绝对路径进行构建与运行。
@@ -130,7 +130,51 @@ use({
 - 多文件构建：总是弹出“Output name”输入框；若你对“同一源集合”输入过名称，将自动带出为默认值。
 - 单文件构建：直接使用默认名（同文件名）。
 
-## 配置
+## ⌨️ 命令与快捷键
+
+- 命令：
+  - `QuickCBuild`/`QuickCRun`/`QuickCBR`/`QuickCDebug`
+  - `QuickCMake`/`QuickCMakeRun [target]`
+  - `QuickCCompileDB`/`QuickCCompileDBGen`/`QuickCCompileDBUse`
+  - `QuickCQuickfix`（打开 quickfix，优先 Telescope）
+
+- 默认键位（普通模式）：
+  - `<leader>cqb` 构建
+  - `<leader>cqr` 运行
+  - `<leader>cqR` 构建并运行
+  - `<leader>cqD` 调试
+  - `<leader>cqM` Make 目标（Telescope）
+  - `<leader>cqS` 源文件选择（Telescope）
+  - `<leader>cqf` 打开 quickfix（Telescope）
+
+## ⚙️ 配置
+
+最小示例（仅常用项）：
+
+```lua
+require("quick-c").setup({
+  outdir = "source", -- 或自定义路径，如 vim.fn.stdpath("data") .. "/quick-c-bin"
+  toolchain = {
+    windows = { c = { "gcc", "cl" }, cpp = { "g++", "cl" } },
+    unix    = { c = { "gcc", "clang" }, cpp = { "g++", "clang++" } },
+  },
+  make = {
+    prefer = { "make", "mingw32-make" },
+    cache = { ttl = 10 },
+    telescope = { choose_terminal = "auto" },
+  },
+  diagnostics = {
+    quickfix = { open = "warning", jump = "warning", use_telescope = true },
+  },
+  keymaps = {
+    enabled = true,
+    build = "<leader>cqb",
+    run = "<leader>cqr",
+    build_and_run = "<leader>cqR",
+    debug = "<leader>cqD",
+  },
+})
+```
 
 默认配置（三重懒加载启用；完整配置与注释均保留）：
 
@@ -278,35 +322,7 @@ require("quick-c").setup({
 })
 ```
 
-## 命令与快捷键
-
-- `:QuickCBuild` 构建当前 C/C++ 文件
-- `:QuickCRun` 运行当前文件对应的可执行文件
-- `:QuickCBR` 构建并运行
-- `:QuickCDebug` 使用 `nvim-dap` 以 `codelldb` 调试可执行文件
- 
-- `:QuickCMake` 打开 Telescope 选择器列出可用 make 目标
-- `:QuickCMakeRun [target]` 直接运行指定 make 目标
- 
- - `:QuickCCompileDB` 按配置 `compile_commands.mode` 执行（generate/use）
-- `:QuickCCompileDBGen` 强制生成 `compile_commands.json` 到配置的 `outdir`
-- `:QuickCCompileDBUse` 从 `compile_commands.use_path` 复制到配置的 `outdir`
-- `:QuickCQuickfix` 打开 quickfix 列表（优先 Telescope，无则 `:copen`）
-
-多文件支持（命令接受文件参数，支持路径补全）：
-
-- `:QuickCBuild [file1 ... fileN]`
-- `:QuickCBR [file1 ... fileN]`
-- `:QuickCRun [file1 ... fileN]`（用于根据相同的源文件集合推导可执行文件路径）
-
-注意：请只传入源文件（.c/.cpp/.cc/.cxx），头文件无需传入。
-
-快捷键补充：
-
-- `<leader>cqS` → 打开源文件选择器（Telescope，多选后可构建/运行）。
-- `<leader>cqf` → 打开 quickfix 列表（优先 Telescope）
-
-### 诊断与快速跳转（quickfix / Telescope）
+### 🧪 诊断与快速跳转（quickfix / Telescope）
 
 - 构建时会解析 gcc/clang/MSVC 输出为 quickfix 项，支持错误与警告。
 - 满足触发条件时自动打开列表并跳转到第一条；默认仅有错误时打开/跳转。
@@ -329,6 +345,12 @@ require('quick-c').setup({
 })
 ```
 
+#### 支持的编译器输出
+
+- gcc/g++
+- clang/clang++
+- MSVC cl
+
 默认快捷键（普通模式）：
 
 - `<leader>cqb` → 构建
@@ -343,7 +365,7 @@ require('quick-c').setup({
 - 以上键位均可通过 `setup({ keymaps = { ... } })` 自定义或禁用。
 - 插件设置键位时使用 `unique=true`，不会覆盖你已有的映射；如键位已被占用会跳过注入。
 
-### Telescope 预览说明
+### 📚 Telescope 预览说明
 
 - 目录选择器与目标选择器均内置 Makefile 预览。
 - 目标选择器阶段，预览固定显示已选目录中的 Makefile，不随光标移动刷新（避免卡顿）。
@@ -353,7 +375,7 @@ require('quick-c').setup({
   - `make.telescope.max_preview_lines`：截断时最多显示的行数。
   - `make.telescope.set_filetype`：是否设置预览 buffer 的 `filetype=make`。
 
-### 终端选择行为
+### 🔌 终端选择行为
 
 - 选择 make 目标后，可将命令发送到已打开的内置终端，或使用默认策略（betterTerm 优先，失败回退内置）。
 - 通过 `make.telescope.choose_terminal` 控制行为：
@@ -361,7 +383,7 @@ require('quick-c').setup({
   - `'always'`：总是弹出选择器。
   - `'never'`：总是使用默认策略。
 
-### Makefile 搜索说明
+### 🔎 Makefile 搜索说明
 
 - 若未设置 `make.cwd`，插件会在“当前文件所在目录”为起点：
   - 向上查找至多 `search.up` 层（默认 2 层）
@@ -369,7 +391,7 @@ require('quick-c').setup({
   - 找到包含 `Makefile`/`makefile`/`GNUmakefile` 的首个目录作为工作目录
   - 会跳过 `ignore_dirs` 名单中的目录（默认：`.git`、`node_modules`、`.cache`）
 
-## 架构说明
+## 🛠️ 架构说明
 
 内部已模块化重构，但对外 API 不变：
 
@@ -389,19 +411,19 @@ require('quick-c').setup({
 - 行为保持不变：
   - 键位可配置/禁用；多 Makefile 时目录先选后执行；选择后自动关闭选择器并在终端执行；全程异步不阻塞。
 
-## Windows 注意事项
+## 💻 Windows 注意事项
 
 - 如在 PowerShell 下运行，会自动使用 `& 'path\to\exe'` 语法；`cmd`/其它 shell 下会使用 `"path\to\exe"`
 - 使用 MSVC `cl` 编译时，请确保已在“开发者命令提示符”或已正确设置 VS 环境变量的终端中启动 Neovim
 
-## 调试
+## 🐞 调试
 
 - 需要安装并配置 `nvim-dap` 与 `codelldb`
 - `:QuickCDebug` 会以 `codelldb` 方案启动，`program` 指向最近一次构建输出
 
  
 
-## 故障排查
+## 🔎 故障排查
 
 - 找不到编译器：请确认 `gcc/g++`、`clang/clang++` 或 `cl` 在 `PATH` 中
 - 构建失败但无输出：查看 Neovim `:messages` 或终端面板中的编译器警告/错误
@@ -409,8 +431,10 @@ require('quick-c').setup({
 - 无法运行可执行文件：请先 `:QuickCBuild`；或检查输出目录与文件后缀（Windows 需要 `.exe`）
  - 未解析到 make 目标：确认项目存在 `Makefile`，以及 `make -qp` 在该目录下可运行；Windows 可改用 `mingw32-make`
 
-## 发布说明
+## 📋 发布说明
 
 参见 [Release.md](Release.md)
+
+
 
 

@@ -27,17 +27,17 @@
 
 Lightweight Neovim plugin for C/C++: build, run, and debug the current file in one key. Works on Windows/Linux/macOS. Integrates with BetterTerm and the built-in terminal. Fully async.
 
-## Features
+## ✨ Features
 
-- Build/Run (async): `QuickCBuild`, `QuickCRun`, `QuickCBR` (build & run)
-- Debug integration: `QuickCDebug` via `nvim-dap` and `codelldb`
-- Cross-platform: auto select compiler (gcc/clang/cl) and runtime (PowerShell/terminal)
-- Flexible output dir: default to source folder; configurable
-- Make integration: Telescope pickers for Make targets, custom args with cache
-- compile_commands.json: generate or use an external one for clangd
-- Keymaps included and non-invasive (unique=true)
+ - 🚀 Build/Run (async): `QuickCBuild`, `QuickCRun`, `QuickCBR` (build & run)
+ - 🐞 Debug integration: `QuickCDebug` via `nvim-dap` and `codelldb`
+ - 🌐 Cross-platform: auto select compiler (gcc/clang/cl) and runtime (PowerShell/terminal)
+ - 📁 Flexible output dir: default to source folder; configurable
+ - 🔧 Make integration: Telescope pickers for Make targets, custom args with cache
+ - 📚 compile_commands.json: generate or use an external one for clangd
+ - ⌨️ Keymaps included and non-invasive (unique=true)
 
-## Quick Start
+## 🚀 Quick Start
 
 - Build: `:QuickCBuild` or `<leader>cqb`
 - Run: `:QuickCRun` or `<leader>cqr`
@@ -61,20 +61,26 @@ Output name prompt & cache:
 
 If the current buffer is unnamed and modified, auto-jump from diagnostics is skipped to avoid save prompts.
 
-## Dependencies
+### Supported compiler outputs
+
+- gcc/g++
+- clang/clang++
+- MSVC cl
+
+## 📦 Dependencies
 
 - Neovim 0.8+
 - Telescope (optional, recommended)
 - nvim-dap + codelldb (for debugging)
 
-## Commands
+## ⌨️ Commands
 
 - `:QuickCBuild`, `:QuickCRun`, `:QuickCBR`, `:QuickCDebug`
 - `:QuickCMake`, `:QuickCMakeRun [target]`
 - `:QuickCCompileDB`, `:QuickCCompileDBGen`, `:QuickCCompileDBUse`
 - `:QuickCQuickfix` open quickfix (Telescope if available)
 
-## Keymaps (normal mode)
+## ⌨️ Keymaps (normal mode)
 
 - `<leader>cqb` build
 - `<leader>cqr` run
@@ -84,14 +90,41 @@ If the current buffer is unnamed and modified, auto-jump from diagnostics is ski
 - `<leader>cqS` Telescope source picker
 - `<leader>cqf` Open quickfix (Telescope)
 
-## Diagnostics -> Quickfix / Telescope
+## 🧪 Diagnostics -> Quickfix / Telescope
 
 - Parses gcc/clang/MSVC output to quickfix (errors & warnings)
 - Auto open/jump policy: `always | error | warning | never`
 - Prefer Telescope quickfix when available (`use_telescope = true`)
 - If current buffer is unnamed and modified, auto-jump is skipped to avoid save prompts
 
-## Configuration
+## ⚙️ Configuration
+
+Minimal example:
+
+```lua
+require('quick-c').setup({
+  outdir = 'source',
+  toolchain = {
+    windows = { c = { 'gcc', 'cl' }, cpp = { 'g++', 'cl' } },
+    unix    = { c = { 'gcc', 'clang' }, cpp = { 'g++', 'clang++' } },
+  },
+  make = {
+    prefer = { 'make', 'mingw32-make' },
+    cache = { ttl = 10 },
+    telescope = { choose_terminal = 'auto' },
+  },
+  diagnostics = {
+    quickfix = { open = 'warning', jump = 'warning', use_telescope = true },
+  },
+  keymaps = {
+    enabled = true,
+    build = '<leader>cqb',
+    run = '<leader>cqr',
+    build_and_run = '<leader>cqR',
+    debug = '<leader>cqD',
+  },
+})
+```
 
 Example (trimmed):
 
@@ -130,7 +163,7 @@ require('quick-c').setup({
 })
 ```
 
-## Install (lazy.nvim)
+## 🧩 Install (lazy.nvim)
 
 ```lua
 {
@@ -156,7 +189,7 @@ require('quick-c').setup({
 }
 ```
 
-## Install (packer.nvim)
+## 🧩 Install (packer.nvim)
 
 ```lua
 use({
@@ -167,7 +200,7 @@ use({
 })
 ```
 
-## Telescope preview notes
+## 📚 Telescope preview notes
 
 - Both directory and target pickers include a Makefile preview.
 - In the target picker, the preview is fixed to the Makefile in the selected directory (no live refresh for performance).
@@ -177,7 +210,7 @@ use({
   - `make.telescope.max_preview_lines`
   - `make.telescope.set_filetype`
 
-## Terminal selection behavior
+## 🔌 Terminal selection behavior
 
 - After selecting a Make target, commands can be sent to an opened built-in terminal, or follow the default strategy (BetterTerm first, fallback to native terminal).
 - Configure via `make.telescope.choose_terminal`:
@@ -185,7 +218,7 @@ use({
   - `always`: always show selector
   - `never`: always use default strategy
 
-## Makefile search notes
+## 🔎 Makefile search notes
 
 - If `make.cwd` is not set, the plugin searches from the current file's directory:
   - Up to `search.up` levels upward (default 2)
@@ -193,7 +226,7 @@ use({
   - The first directory containing `Makefile`/`makefile`/`GNUmakefile` is used as cwd
   - Directories in `ignore_dirs` are skipped (default: `.git`, `node_modules`, `.cache`)
 
-## Architecture
+## 🛠️ Architecture
 
 - Modules
   - `lua/quick-c/init.lua`: wiring, commands, keymaps
@@ -207,17 +240,17 @@ use({
   - `lua/quick-c/cc.lua`: compile_commands.json
   - `lua/quick-c/keys.lua`: key injection
 
-## Windows notes
+## 💻 Windows notes
 
 - On PowerShell, runs as `& 'path\\to\\exe'`; on other shells, runs as `"path\\to\\exe"`.
 - For MSVC `cl`, run Neovim from a Developer Command Prompt or with VS env vars initialized.
 
-## Debugging
+## 🐞 Debugging
 
 - Requires `nvim-dap` and `codelldb`.
 - `:QuickCDebug` launches with codelldb; `program` points to the last build output.
 
-## Troubleshooting
+## 🔎 Troubleshooting
 
 - Compiler not found: ensure `gcc/g++`, `clang/clang++`, or `cl` are in PATH.
 - Build failed without output: check `:messages` or the terminal panel for warnings/errors.
@@ -226,6 +259,7 @@ use({
 - No make targets found: ensure a Makefile exists and `make -qp` works in that directory; on Windows try `mingw32-make`.
 
 
-## Release notes
+## 📋 Release notes
 
 See [Release.md](Release.md)
+

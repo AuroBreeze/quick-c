@@ -8,6 +8,8 @@ local PROJECT_CONFIG = require('quick-c.project_config')
 
 M.config = CFG.defaults
 M.user_opts = {}
+M._last_project_config_path = nil
+M._reload_timer = nil
 
 local function is_windows() return U.is_windows() end
 
@@ -140,7 +142,17 @@ end
 local function recompute_config()
     M.config = vim.tbl_deep_extend("force", CFG.defaults, M.user_opts or {})
     local merged_config = PROJECT_CONFIG.setup(M.config)
-    if merged_config then M.config = merged_config U.notify_info("已加载项目配置文件 (.quick-c.json)") end
+    if merged_config then
+        M.config = merged_config
+        local root = vim.fn.getcwd()
+        local p = PROJECT_CONFIG.find_project_config(root)
+        if p and p ~= M._last_project_config_path then
+            U.notify_info("已加载项目配置文件 (.quick-c.json)")
+            M._last_project_config_path = p
+        end
+    else
+        M._last_project_config_path = nil
+    end
 end
 
 function M.setup(opts)
@@ -219,7 +231,23 @@ function M.setup(opts)
         vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
     end, {})
 
-    pcall(vim.api.nvim_create_autocmd, 'DirChanged', { callback = function() pcall(recompute_config) end })
+    local function schedule_recompute(ms)
+        local uv = vim.loop
+        if not M._reload_timer or M._reload_timer:is_closing() then
+            M._reload_timer = uv.new_timer()
+        end
+        local t = M._reload_timer
+        t:stop()
+        t:start(ms or 400, 0, function()
+            vim.schedule(function()
+                pcall(recompute_config)
+            end)
+        end)
+    end
+
+    pcall(vim.api.nvim_create_autocmd, 'DirChanged', { callback = function()
+        schedule_recompute(400)
+    end })
 
     require('quick-c.keys').setup(M.config, {
         build = build,

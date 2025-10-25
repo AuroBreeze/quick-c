@@ -112,7 +112,6 @@ end
 function M.setup(main_config)
     local project_config = M.get_current_project_config()
     if project_config then
-        U.notify_info("已加载项目配置文件")
         local merged_config = M.merge_project_config(main_config, project_config)
 
         -- 验证合并后的配置

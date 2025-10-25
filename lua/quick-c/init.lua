@@ -60,8 +60,29 @@ local function make_run_target(target)
         notify_err("未找到 make 或 mingw32-make")
         return
     end
-    local base = (M.config.make and M.config.make.cwd) or vim.fn.fnamemodify(vim.fn.expand("%:p"), ":h")
+    local base = vim.fn.fnamemodify(vim.fn.expand("%:p"), ":h")
     resolve_make_cwd_async(base, function(cwd)
+        local mkargs = (M.config.make and M.config.make.args) or {}
+        if mkargs.prompt ~= false then
+            local def = mkargs.default or ""
+            local key = cwd or "" -- simple remember per-cwd in vim.g
+            vim.g.quick_c_make_last_args = vim.g.quick_c_make_last_args or {}
+            if mkargs.remember ~= false then
+                def = vim.g.quick_c_make_last_args[key] or def
+            end
+            local ui = vim.ui or {}
+            if ui.input then
+                ui.input({ prompt = 'make 参数: ', default = def }, function(arg)
+                    if mkargs.remember ~= false and arg and arg ~= '' then
+                        vim.g.quick_c_make_last_args[key] = arg
+                    end
+                    local extra = (arg and arg ~= '') and (' ' .. arg) or ''
+                    local cmd = string.format("%s -C %s %s%s", prog, shell_quote_path(cwd), target or '', extra)
+                    run_make_in_terminal(cmd)
+                end)
+                return
+            end
+        end
         local cmd = string.format("%s -C %s %s", prog, shell_quote_path(cwd), target or "")
         run_make_in_terminal(cmd)
     end)

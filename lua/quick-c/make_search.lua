@@ -256,7 +256,22 @@ function M.find_make_roots_async(config, start_dir, cb)
 end
 
 function M.resolve_make_cwd_async(config, start_dir, cb)
-  if config.make and config.make.cwd then cb(config.make.cwd) return end
+  if config.make and config.make.cwd then
+    local cwd = tostring(config.make.cwd)
+    local is_abs
+    if U.is_windows() then
+      -- e.g. C:\ or \\server\share or starts with /
+      is_abs = cwd:match('^%a:[\\/]') or cwd:match('^[\\/]') or cwd:match('^\\\\')
+    else
+      is_abs = cwd:sub(1,1) == '/'
+    end
+    if not is_abs then
+      local base = start_dir and vim.fn.fnamemodify(start_dir, ':p') or vim.fn.fnamemodify(vim.fn.expand('%:p'), ':h')
+      cwd = vim.fn.fnamemodify(U.join(base, cwd), ':p')
+    end
+    cb(cwd)
+    return
+  end
   local ok_t = pcall(require, 'telescope')
   M.find_make_roots_async(config, start_dir, function(roots)
     if #roots == 0 then cb(start_dir) return end

@@ -15,7 +15,8 @@
 - **终端兼容**：优先将命令发送到 `betterTerm`（如已安装），否则使用 Neovim 内置终端
  
 - **Make 集成（异步）**：自动解析 `make -qp` 目标，Telescope 选择执行（如 `clean`、`install`）
-- **便捷快捷键**：默认提供 `<leader>cb`、`<leader>cr`、`<leader>cR`、`<leader>cD`、`<leader>cm`
+- **便捷快捷键**：默认提供 `<leader>cqb`、`<leader>cqr`、`<leader>cqR`、`<leader>cqD`、`<leader>cqM`
+ - **LSP 集成（compile_commands.json）**：一键为当前文件目录生成或使用指定 `compile_commands.json` 供 clangd 等 LSP 使用
 
 ### v1.1.0 更新摘要
 
@@ -52,16 +53,17 @@
   ft = { "c", "cpp" },
   -- 2) 快捷键触发（首次按键时加载，映射由插件在 setup 时注入）
   keys = {
-    { "<leader>cb", desc = "Quick-c: Build" },
-    { "<leader>cr", desc = "Quick-c: Run" },
-    { "<leader>cR", desc = "Quick-c: Build & Run" },
-    { "<leader>cD", desc = "Quick-c: Debug" },
-    { "<leader>cM", desc = "Quick-c: Make targets (Telescope)" },
+    { "<leader>cqb", desc = "Quick-c: Build" },
+    { "<leader>cqr", desc = "Quick-c: Run" },
+    { "<leader>cqR", desc = "Quick-c: Build & Run" },
+    { "<leader>cqD", desc = "Quick-c: Debug" },
+    { "<leader>cqM", desc = "Quick-c: Make targets (Telescope)" },
   },
   -- 3) 命令触发（调用命令时加载，等同“命令提前加载”）
   cmd = {
     "QuickCBuild", "QuickCRun", "QuickCBR", "QuickCDebug",
     "QuickCMake", "QuickCMakeRun",
+    "QuickCCompileDB", "QuickCCompileDBGen", "QuickCCompileDBUse",
   },
   config = function()
     require("quick-c").setup()
@@ -86,10 +88,16 @@ use({
 
 打开任意 `*.c` 或 `*.cpp` 文件：
 
-- 构建当前文件：`:QuickCBuild` 或 `<leader>cb`
-- 运行可执行文件：`:QuickCRun` 或 `<leader>cr`
-- 构建并运行：`:QuickCBR` 或 `<leader>cR`
-- 调试运行：`:QuickCDebug` 或 `<leader>cD`
+- 构建当前文件：`:QuickCBuild` 或 `<leader>cqb`
+- 运行可执行文件：`:QuickCRun` 或 `<leader>cqr`
+- 构建并运行：`:QuickCBR` 或 `<leader>cqR`
+- 调试运行：`:QuickCDebug` 或 `<leader>cqD`
+
+多文件项目（传入多个源文件路径）：
+
+- C: `:QuickCBuild main.c util.c`
+- C++: `:QuickCBR src/main.cpp src/foo.cpp`
+- 运行基于多文件编译生成的可执行文件：`:QuickCRun src/main.cpp src/foo.cpp`
  
 
 默认输出名为当前文件名（Windows 会追加 `.exe`）；如需自定义输出名，构建时可在提示中输入。
@@ -104,11 +112,11 @@ use({
   -- 三重懒加载：任一触发即可加载
   ft = { "c", "cpp" },
   keys = {
-    { "<leader>cb", desc = "Quick-c: Build" },
-    { "<leader>cr", desc = "Quick-c: Run" },
-    { "<leader>cR", desc = "Quick-c: Build & Run" },
-    { "<leader>cD", desc = "Quick-c: Debug" },
-    { "<leader>cM", desc = "Quick-c: Make targets (Telescope)" },
+    { "<leader>cqb", desc = "Quick-c: Build" },
+    { "<leader>cqr", desc = "Quick-c: Run" },
+    { "<leader>cqR", desc = "Quick-c: Build & Run" },
+    { "<leader>cqD", desc = "Quick-c: Debug" },
+    { "<leader>cqM", desc = "Quick-c: Make targets (Telescope)" },
   },
   cmd = {
     "QuickCBuild", "QuickCRun", "QuickCBR", "QuickCDebug",
@@ -124,6 +132,16 @@ use({
         -- 编译器探测优先级（按平台与语言）
         windows = { c = { "gcc", "cl" }, cpp = { "g++", "cl" } },
         unix    = { c = { "gcc", "clang" }, cpp = { "g++", "clang++" } },
+      },
+      -- 为 LSP 生成/使用 compile_commands.json（clangd 等）
+      compile_commands = {
+        -- 'generate' 生成基于当前文件的简单编译数据库；'use' 从指定路径复制
+        mode = 'generate',
+        -- 输出位置：'source' 表示写入到当前源文件所在目录
+        outdir = 'source',
+        -- 当 mode = 'use' 时，从该路径复制 compile_commands.json 到 outdir
+        -- 例如：vim.fn.getcwd().."/compile_commands.json"
+        use_path = nil,
       },
       
       terminal = {
@@ -193,12 +211,12 @@ use({
         -- 设为 false 可不注入任何默认键位（你可自行映射命令）
         enabled = true,
         -- 置为 nil 或 '' 可单独禁用某个映射
-        build = '<leader>cb',
-        run = '<leader>cr',
-        build_and_run = '<leader>cR',
-        debug = '<leader>cD',
+        build = '<leader>cqb',
+        run = '<leader>cqr',
+        build_and_run = '<leader>cqR',
+        debug = '<leader>cqD',
         -- 注意：键位注入使用 unique=true，不会覆盖你已有的映射；冲突时跳过
-        make = '<leader>cM',
+        make = '<leader>cqM',
       },
     })
   end,
@@ -231,14 +249,26 @@ require("quick-c").setup({
  
 - `:QuickCMake` 打开 Telescope 选择器列出可用 make 目标
 - `:QuickCMakeRun [target]` 直接运行指定 make 目标
+ 
+ - `:QuickCCompileDB` 按配置 `compile_commands.mode` 执行（generate/use）
+ - `:QuickCCompileDBGen` 强制生成 `compile_commands.json` 到配置的 `outdir`
+ - `:QuickCCompileDBUse` 从 `compile_commands.use_path` 复制到配置的 `outdir`
+
+多文件支持（命令接受文件参数，支持路径补全）：
+
+- `:QuickCBuild [file1 ... fileN]`
+- `:QuickCBR [file1 ... fileN]`
+- `:QuickCRun [file1 ... fileN]`（用于根据相同的源文件集合推导可执行文件路径）
+
+注意：请只传入源文件（.c/.cpp/.cc/.cxx），头文件无需传入。
 
 默认快捷键（普通模式）：
 
-- `<leader>cb` → 构建
-- `<leader>cr` → 运行
-- `<leader>cR` → 构建并运行
-- `<leader>cD` → 调试
-- `<leader>cm` → 打开 Make 目标选择器（Telescope）
+- `<leader>cqb` → 构建
+- `<leader>cqr` → 运行
+- `<leader>cqR` → 构建并运行
+- `<leader>cqD` → 调试
+- `<leader>cqM` → 打开 Make 目标选择器（Telescope）
 
 提示：
 - 以上键位均可通过 `setup({ keymaps = { ... } })` 自定义或禁用。
@@ -283,6 +313,7 @@ require("quick-c").setup({
   - `lua/quick-c/make.lua` 选择 make/解析目标/在 cwd 执行
   - `lua/quick-c/telescope.lua` Telescope 交互（目录与目标、自定义参数）
   - `lua/quick-c/build.lua` 构建/运行/调试
+  - `lua/quick-c/cc.lua` 生成或使用指定的 `compile_commands.json`
   
   - `lua/quick-c/keys.lua` 键位注入
 

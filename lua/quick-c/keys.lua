@@ -15,6 +15,15 @@ function K.setup(config, callbacks)
   map(km.build_and_run, callbacks.build_and_run, "Quick-c: Build & Run current C/C++")
   map(km.debug, callbacks.debug, "Quick-c: Debug current C/C++ exe")
   map(km.make, callbacks.make, "Quick-c: Make targets (Telescope)")
+  -- optional: Telescope-based multi-source selector
+  if km.sources then
+    local function sources_picker()
+      local ok, tel = pcall(require, 'quick-c.telescope')
+      if not ok then return end
+      tel.telescope_quickc_sources(config)
+    end
+    map(km.sources, sources_picker, "Quick-c: Select sources (Telescope)")
+  end
 end
 
 return K

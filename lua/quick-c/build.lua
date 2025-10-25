@@ -10,6 +10,31 @@ local function gather_sources()
   return { vim.fn.expand('%:p') }
 end
 
+local function norm_abs(p)
+  if not p or p == '' then return nil end
+  return vim.fn.fnamemodify(p, ':p')
+end
+
+local function from_opts_sources(opts)
+  if not opts or type(opts) ~= 'table' or not opts.sources then return nil end
+  local list = {}
+  for _, s in ipairs(opts.sources) do
+    local abs = norm_abs(s)
+    if abs and vim.fn.filereadable(abs) == 1 then table.insert(list, abs) end
+  end
+  if #list > 0 then return list end
+  return nil
+end
+
+local function detect_ft_from_sources(sources)
+  -- if any cpp-like file, treat as cpp; else c
+  for _, s in ipairs(sources or {}) do
+    local ext = (s:match('%.(%w+)$') or ''):lower()
+    if ext == 'cpp' or ext == 'cc' or ext == 'cxx' or ext == 'hpp' then return 'cpp' end
+  end
+  return 'c'
+end
+
 local function default_out_name(is_win, sources)
   local ext = is_win and '.exe' or ''
   if #sources == 1 then
@@ -93,15 +118,15 @@ function B.get_output_name_async(config, sources, preset_name, cb)
 end
 
 function B.build(config, notify, opts)
-  local ft = vim.bo.filetype
-  if ft ~= 'c' and ft ~= 'cpp' then
-    notify.warn('仅支持 c/cpp 文件')
-    return
-  end
-  local sources = gather_sources()
+  local cli_sources = from_opts_sources(opts)
+  local sources = cli_sources or gather_sources()
   if not sources or #sources == 0 then
     notify.warn('未找到源码文件')
     return
+  end
+  local ft = vim.bo.filetype
+  if ft ~= 'c' and ft ~= 'cpp' then
+    ft = detect_ft_from_sources(sources)
   end
   opts = opts or {}
   B.get_output_name_async(config, sources, nil, function(name)
@@ -133,8 +158,16 @@ function B.build(config, notify, opts)
   end)
 end
 
-function B.run(config, notify, exe)
-  local cur = { vim.fn.expand('%:p') }
+function B.run(config, notify, exe_or_opts)
+  local opts
+  local exe
+  if type(exe_or_opts) == 'table' then
+    opts = exe_or_opts
+  else
+    exe = exe_or_opts
+  end
+  local cli_sources = from_opts_sources(opts)
+  local cur = cli_sources or { vim.fn.expand('%:p') }
   local is_win = U.is_windows()
   exe = exe or resolve_out_path(config, cur, default_out_name(is_win, cur))
   if vim.fn.filereadable(exe) ~= 1 then
@@ -154,12 +187,20 @@ function B.run(config, notify, exe)
   end
 end
 
-function B.build_and_run(config, notify)
-  B.build(config, notify, {
-    on_exit = function(code, exe)
-      if code == 0 then B.run(config, notify, exe) end
-    end,
-  })
+function B.build_and_run(config, notify, opts)
+  opts = opts or {}
+  local user_on_exit = opts.on_exit
+  opts.on_exit = function(code, exe)
+    if user_on_exit then pcall(user_on_exit, code, exe) end
+    if code == 0 then
+      if type(opts) == 'table' then
+        B.run(config, notify, opts)
+      else
+        B.run(config, notify, exe)
+      end
+    end
+  end
+  B.build(config, notify, opts)
 end
 
 function B.debug_run(config, notify, exe)

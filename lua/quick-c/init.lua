@@ -94,20 +94,59 @@ local function build(...) require('quick-c.build').build(M.config, { err = notif
 local function run(...) require('quick-c.build').run(M.config, { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
 local function build_and_run(...) require('quick-c.build').build_and_run(M.config, { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
 local function debug_run(...) require('quick-c.build').debug_run(M.config, { err = notify_err, warn = notify_warn, info = notify_info }, ...) end
+local function cc_apply()
+  require('quick-c.cc').apply(M.config, { err = notify_err, warn = notify_warn, info = notify_info })
+end
+local function cc_generate()
+  local cfg = M.config
+  cfg.compile_commands = cfg.compile_commands or {}
+  cfg.compile_commands.mode = 'generate'
+  require('quick-c.cc').generate(cfg, { err = notify_err, warn = notify_warn, info = notify_info })
+end
+local function cc_use()
+  local cfg = M.config
+  cfg.compile_commands = cfg.compile_commands or {}
+  cfg.compile_commands.mode = 'use'
+  require('quick-c.cc').use_external(cfg, { err = notify_err, warn = notify_warn, info = notify_info })
+end
 
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
-  vim.api.nvim_create_user_command("QuickCBuild", function()
-    build()
-  end, {})
-  vim.api.nvim_create_user_command("QuickCRun", function()
-    run()
-  end, {})
-  vim.api.nvim_create_user_command("QuickCBR", function()
-    build_and_run()
-  end, {})
+  vim.api.nvim_create_user_command("QuickCBuild", function(opts)
+    local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
+    if sources then
+      build({ sources = sources })
+    else
+      build()
+    end
+  end, { nargs = "*", complete = "file" })
+  vim.api.nvim_create_user_command("QuickCRun", function(opts)
+    local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
+    if sources then
+      run({ sources = sources })
+    else
+      run()
+    end
+  end, { nargs = "*", complete = "file" })
+  vim.api.nvim_create_user_command("QuickCBR", function(opts)
+    local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
+    if sources then
+      build_and_run({ sources = sources })
+    else
+      build_and_run()
+    end
+  end, { nargs = "*", complete = "file" })
   vim.api.nvim_create_user_command("QuickCDebug", function()
     debug_run()
+  end, {})
+  vim.api.nvim_create_user_command("QuickCCompileDB", function()
+    cc_apply()
+  end, {})
+  vim.api.nvim_create_user_command("QuickCCompileDBGen", function()
+    cc_generate()
+  end, {})
+  vim.api.nvim_create_user_command("QuickCCompileDBUse", function()
+    cc_use()
   end, {})
   vim.api.nvim_create_user_command("QuickCMake", function()
     telescope_make()

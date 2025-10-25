@@ -8,6 +8,15 @@ C.defaults = {
     windows = { c = { "gcc", "cl" }, cpp = { "g++", "cl" } },
     unix = { c = { "gcc", "clang" }, cpp = { "g++", "clang++" } },
   },
+  -- compile_commands.json 相关配置
+  compile_commands = {
+    -- mode = 'generate' | 'use'
+    mode = 'generate',
+    -- 生成或复制的目标输出目录：'source' 表示放在当前源文件目录
+    outdir = 'source',
+    -- 当 mode = 'use' 时，从此路径复制 compile_commands.json
+    use_path = nil,
+  },
   compile_cmds = {
     gcc = function(ft, sources, out)
       local cc = (ft == "c") and "gcc" or "g++"
@@ -68,11 +77,12 @@ C.defaults = {
   },
   keymaps = {
     enabled = true,
-    build = "<leader>cb",
-    run = "<leader>cr",
-    build_and_run = "<leader>cR",
-    debug = "<leader>cD",
-    make = "<leader>cM",
+    build = "<leader>cqb",
+    run = "<leader>cqr",
+    build_and_run = "<leader>cqR",
+    debug = "<leader>cqD",
+    make = "<leader>cqM",
+    sources = "<leader>cqS",
   },
 }
 

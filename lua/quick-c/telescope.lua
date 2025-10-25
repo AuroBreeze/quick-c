@@ -198,4 +198,78 @@ function M.telescope_make(config,
   end)
 end
 
+-- Telescope picker for Quick-c: select multiple C/C++ sources, then choose action
+function M.telescope_quickc_sources(config)
+  local ok_t = pcall(require, 'telescope')
+  if not ok_t then
+    vim.notify('未找到 telescope.nvim', vim.log.levels.ERROR)
+    return
+  end
+  local pickers = require('telescope.pickers')
+  local finders = require('telescope.finders')
+  local conf = require('telescope.config').values
+  local cwd = vim.fn.getcwd()
+  local function list_sources()
+    local results = {}
+    local patterns = { '**/*.c', '**/*.cpp', '**/*.cc', '**/*.cxx' }
+    local seen = {}
+    for _, pat in ipairs(patterns) do
+      local files = vim.fn.glob(pat, true, true)
+      for _, f in ipairs(files) do
+        local p = vim.fn.fnamemodify(f, ':p')
+        if vim.fn.filereadable(p) == 1 and not seen[p] then
+          table.insert(results, p)
+          seen[p] = true
+        end
+      end
+    end
+    return results
+  end
+  local files = list_sources()
+  if #files == 0 then
+    vim.notify('未在当前工作目录找到 C/C++ 源文件', vim.log.levels.WARN)
+    return
+  end
+  pickers.new({}, {
+    prompt_title = 'Quick-c: Select sources (' .. cwd .. ')',
+    finder = finders.new_table({ results = files }),
+    sorter = conf.generic_sorter({}),
+    attach_mappings = function(bufnr, map)
+      local actions = require('telescope.actions')
+      local action_state = require('telescope.actions.state')
+      local function do_action()
+        local picker = action_state.get_current_picker(bufnr)
+        local multi = picker:get_multi_selection()
+        local sel = action_state.get_selected_entry()
+        local srcs = {}
+        if multi and #multi > 0 then
+          for _, e in ipairs(multi) do table.insert(srcs, e[1] or e.value or e.path or e) end
+        elseif sel then
+          table.insert(srcs, sel[1] or sel.value or sel.path)
+        end
+        actions.close(bufnr)
+        if not srcs or #srcs == 0 then return end
+        local ui = vim.ui or {}
+        local items = {
+          { name = 'Build', fn = function() require('quick-c.build').build(config, { err = U.notify_err, warn = U.notify_warn, info = U.notify_info }, { sources = srcs }) end },
+          { name = 'Run', fn = function() require('quick-c.build').run(config, { err = U.notify_err, warn = U.notify_warn, info = U.notify_info }, { sources = srcs }) end },
+          { name = 'Build & Run', fn = function() require('quick-c.build').build_and_run(config, { err = U.notify_err, warn = U.notify_warn, info = U.notify_info }, { sources = srcs }) end },
+        }
+        if ui.select then
+          ui.select({ items[1].name, items[2].name, items[3].name }, { prompt = '选择操作' }, function(choice)
+            if choice == items[1].name then items[1].fn() end
+            if choice == items[2].name then items[2].fn() end
+            if choice == items[3].name then items[3].fn() end
+          end)
+        else
+          items[1].fn()
+        end
+      end
+      map('i', '<CR>', do_action)
+      map('n', '<CR>', do_action)
+      return true
+    end,
+  }):find()
+end
+
 return M

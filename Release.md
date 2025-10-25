@@ -1,5 +1,31 @@
 # Quick-c Release Notes
 
+## v1.3.0 (2025-10-25)
+
+### 新增
+- LSP：`compile_commands.json` 支持
+  - 生成模式：为当前文件目录生成最简编译数据库
+  - 指定模式：从配置的路径复制到目标目录
+  - 新命令：`QuickCCompileDB` / `QuickCCompileDBGen` / `QuickCCompileDBUse`
+- 多文件构建/运行
+  - `:QuickCBuild/QuickCBR/QuickCRun [file1 ... fileN]` 支持传入多个源文件
+  - 输出名缓存：按“源文件集合”记忆上次输入的输出名（如 `[1.c,2.c]` 与 `[1.c,2.c,3.c]` 各自独立）
+- Telescope 源选择器
+  - `<leader>cqS` 打开，支持多选后选择 Build / Run / Build & Run
+  - 多选提示：Tab 选择，Shift+Tab 反向选择，Ctrl+Space 切换选择但不移动
+
+### 改进
+- 默认键位前缀统一为 `<leader>cq*`
+  - 构建/运行/构建并运行/调试/Make/源选择：`<leader>cqb/cqr/cqR/cqD/cqM/cqS`
+- README：补充多文件与 Telescope 多选使用说明
+
+### 修复
+- `build_and_run` 运行阶段直接使用构建返回的可执行文件路径，避免多文件或自定义输出名时“构建成功但运行找不到可执行文件”
+
+### 迁移指南
+- 如你依赖旧键位，请在 `setup({ keymaps = { ... } })` 中显式配置回旧值
+- `compile_commands` 默认不自动触发；需要时使用命令或在配置中切换 `mode`
+
 ## v1.2.0 (2025-10-24)
 
 ### 新增

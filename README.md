@@ -98,6 +98,12 @@ use({
 - C: `:QuickCBuild main.c util.c`
 - C++: `:QuickCBR src/main.cpp src/foo.cpp`
 - 运行基于多文件编译生成的可执行文件：`:QuickCRun src/main.cpp src/foo.cpp`
+
+使用 Telescope 选择多文件（推荐）：
+
+- 按 `<leader>cqS` 打开源文件选择器。
+- 在列表中按 Tab 多选（Shift+Tab 往回，多选不移动可用 Ctrl+Space）。
+- 回车后选择操作：Build / Run / Build & Run。
  
 
 默认输出名为当前文件名（Windows 会追加 `.exe`）；如需自定义输出名，构建时可在提示中输入。
@@ -251,8 +257,8 @@ require("quick-c").setup({
 - `:QuickCMakeRun [target]` 直接运行指定 make 目标
  
  - `:QuickCCompileDB` 按配置 `compile_commands.mode` 执行（generate/use）
- - `:QuickCCompileDBGen` 强制生成 `compile_commands.json` 到配置的 `outdir`
- - `:QuickCCompileDBUse` 从 `compile_commands.use_path` 复制到配置的 `outdir`
+- `:QuickCCompileDBGen` 强制生成 `compile_commands.json` 到配置的 `outdir`
+- `:QuickCCompileDBUse` 从 `compile_commands.use_path` 复制到配置的 `outdir`
 
 多文件支持（命令接受文件参数，支持路径补全）：
 
@@ -261,6 +267,10 @@ require("quick-c").setup({
 - `:QuickCRun [file1 ... fileN]`（用于根据相同的源文件集合推导可执行文件路径）
 
 注意：请只传入源文件（.c/.cpp/.cc/.cxx），头文件无需传入。
+
+快捷键补充：
+
+- `<leader>cqS` → 打开源文件选择器（Telescope，多选后可构建/运行）。
 
 默认快捷键（普通模式）：
 

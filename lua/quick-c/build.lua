@@ -1,9 +1,17 @@
 local U = require('quick-c.util')
 local T = require('quick-c.terminal')
 local B = {}
+local NAME_CACHE = {}
 
 local function ensure_outdir(dir)
   vim.fn.mkdir(dir, 'p')
+end
+
+local function sources_key(sources)
+  local list = {}
+  for _, s in ipairs(sources or {}) do table.insert(list, vim.fn.fnamemodify(s, ':p')) end
+  table.sort(list)
+  return table.concat(list, ';')
 end
 
 local function gather_sources()
@@ -129,7 +137,10 @@ function B.build(config, notify, opts)
     ft = detect_ft_from_sources(sources)
   end
   opts = opts or {}
-  B.get_output_name_async(config, sources, nil, function(name)
+  local key = sources_key(sources)
+  local cached = NAME_CACHE[key]
+  B.get_output_name_async(config, sources, cached, function(name)
+    if not cached and name and name ~= '' then NAME_CACHE[key] = name end
     local is_win = U.is_windows()
     local exe = resolve_out_path(config, sources, name)
     local cmd = build_cmd(config, is_win, ft, sources, exe)
@@ -193,11 +204,8 @@ function B.build_and_run(config, notify, opts)
   opts.on_exit = function(code, exe)
     if user_on_exit then pcall(user_on_exit, code, exe) end
     if code == 0 then
-      if type(opts) == 'table' then
-        B.run(config, notify, opts)
-      else
-        B.run(config, notify, exe)
-      end
+      -- 关键修复：直接使用构建时得到的 exe 路径运行，避免名称不一致
+      B.run(config, notify, exe)
     end
   end
   B.build(config, notify, opts)

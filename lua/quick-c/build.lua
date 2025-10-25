@@ -114,7 +114,8 @@ local function parse_diagnostics(lines)
   for _, l in ipairs(lines or {}) do
     if type(l) ~= 'string' or l == '' then goto continue end
     -- gcc/clang with column: file:line:col: type: message
-    local f, ln, col, typ, msg = l:match("^([^:%c]+):(%d+):(%d+):%s*(%w+)%s*:%s*(.+)$")
+    -- allow Windows drive letters and colons in paths by making filename greedy
+    local f, ln, col, typ, msg = l:match("^(.+):(%d+):(%d+):%s*(%w+)%s*:%s*(.+)$")
     if f then
       local it = { filename = f, lnum = tonumber(ln), col = tonumber(col), text = msg, type = (typ == 'error' and 'E' or 'W') }
       if it.type == 'E' then has_error = true else has_warning = true end
@@ -122,7 +123,7 @@ local function parse_diagnostics(lines)
       goto continue
     end
     -- gcc/clang without column: file:line: type: message
-    local f2, ln2, typ2, msg2 = l:match("^([^:%c]+):(%d+):%s*(%w+)%s*:%s*(.+)$")
+    local f2, ln2, typ2, msg2 = l:match("^(.+):(%d+):%s*(%w+)%s*:%s*(.+)$")
     if f2 then
       local it = { filename = f2, lnum = tonumber(ln2), col = 1, text = msg2, type = (typ2 == 'error' and 'E' or 'W') }
       if it.type == 'E' then has_error = true else has_warning = true end

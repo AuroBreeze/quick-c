@@ -218,6 +218,14 @@ use({
           remember = true, -- 记忆最近一次输入，作为默认值
         },
       },
+      diagnostics = {
+        quickfix = {
+          enabled = true,
+          open = 'warning',   -- always | error | warning | never
+          jump = 'warning',   -- always | error | warning | never
+          use_telescope = true,
+        },
+      },
       keymaps = {
         -- 设为 false 可不注入任何默认键位（你可自行映射命令）
         enabled = true,

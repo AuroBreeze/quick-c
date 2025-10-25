@@ -7,24 +7,12 @@ M.CONFIG_FILE_NAME = ".quick-c.json"
 
 -- 从项目根目录查找配置文件
 function M.find_project_config(start_path)
-    local current_dir = start_path or vim.fn.getcwd()
-    local dir = current_dir
-
-    -- 向上查找项目配置文件
-    while dir and dir ~= "" do
-        local config_path = U.join(dir, M.CONFIG_FILE_NAME)
-        if vim.fn.filereadable(config_path) == 1 then
-            return config_path
-        end
-
-        -- 到达根目录时停止
-        local parent = vim.fn.fnamemodify(dir, ":h")
-        if parent == dir then
-            break
-        end
-        dir = parent
+    local dir = start_path or vim.fn.getcwd()
+    if not dir or dir == "" then return nil end
+    local config_path = U.join(dir, M.CONFIG_FILE_NAME)
+    if vim.fn.filereadable(config_path) == 1 then
+        return config_path
     end
-
     return nil
 end
 
@@ -88,8 +76,7 @@ end
 
 -- 获取当前项目的配置（基于当前文件或工作目录）
 function M.get_current_project_config()
-    local current_file = vim.fn.expand("%:p")
-    local start_path = current_file ~= "" and vim.fn.fnamemodify(current_file, ":h") or vim.fn.getcwd()
+    local start_path = vim.fn.getcwd()
 
     local config_path = M.find_project_config(start_path)
     if not config_path then

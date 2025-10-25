@@ -1,12 +1,3 @@
-    -- Validate configuration (global + project)
-    vim.api.nvim_create_user_command("QuickCCheck", function()
-        local ok_v, V = pcall(require, 'quick-c.config_validate')
-        if not ok_v then
-            vim.notify('Quick-c: config_validate module not found', vim.log.levels.ERROR)
-            return
-        end
-        V.run_and_notify(M.config)
-    end, {})
 local M = {}
 local T = require('quick-c.terminal')
 local U = require('quick-c.util')
@@ -234,6 +225,15 @@ function M.setup(opts)
             end
         end
         vim.cmd('copen')
+    end, {})
+    -- Validate configuration (global + project)
+    vim.api.nvim_create_user_command("QuickCCheck", function()
+        local ok_v, V = pcall(require, 'quick-c.config_validate')
+        if not ok_v then
+            vim.notify('Quick-c: config_validate module not found', vim.log.levels.ERROR)
+            return
+        end
+        V.run_and_notify(M.config)
     end, {})
     vim.api.nvim_create_user_command("QuickCMake", function()
         telescope_make()

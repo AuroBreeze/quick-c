@@ -120,7 +120,8 @@ function M.setup(main_config)
         return merged_config
     end
 
-    return main_config
+    -- 未找到项目配置文件时返回 nil，方便调用方判断
+    return nil
 end
 
 return M

@@ -288,7 +288,12 @@ function M.resolve_make_cwd_async(config, start_dir, cb)
       local base = start_dir and vim.fn.fnamemodify(start_dir, ':p') or vim.fn.fnamemodify(vim.fn.expand('%:p'), ':h')
       cwd = vim.fn.fnamemodify(U.join(base, cwd), ':p')
     end
-    cb(cwd)
+    if vim.fn.isdirectory(cwd) == 1 then
+      cb(cwd)
+    else
+      U.notify_warn('指定的 make.cwd 目录不存在：' .. tostring(cwd) .. '，已回退到起点目录')
+      cb(start_dir)
+    end
     return
   end
   local ok_t = pcall(require, 'telescope')

@@ -34,7 +34,8 @@ function M.telescope_make(config,
   local finders = require('telescope.finders')
   local conf = require('telescope.config').values
 
-  local base = (config.make and config.make.cwd) or vim.fn.fnamemodify(vim.fn.expand('%:p'), ':h')
+  -- Always use current file directory as base; relative make.cwd will be resolved inside resolver
+  local base = vim.fn.fnamemodify(vim.fn.expand('%:p'), ':h')
   resolve_make_cwd_async(base, function(cwd)
     parse_make_targets_in_cwd_async(cwd, function(res)
       local targets, phony_set = {}, {}

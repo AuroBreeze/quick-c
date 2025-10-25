@@ -106,6 +106,42 @@ local function resolve_out_path(config, sources, name)
   end
 end
 
+-- Parse compiler diagnostics (gcc/clang/msvc) into quickfix items
+local function parse_diagnostics(lines)
+  local items = {}
+  local has_error = false
+  local has_warning = false
+  for _, l in ipairs(lines or {}) do
+    if type(l) ~= 'string' or l == '' then goto continue end
+    -- gcc/clang with column: file:line:col: type: message
+    local f, ln, col, typ, msg = l:match("^([^:%c]+):(%d+):(%d+):%s*(%w+)%s*:%s*(.+)$")
+    if f then
+      local it = { filename = f, lnum = tonumber(ln), col = tonumber(col), text = msg, type = (typ == 'error' and 'E' or 'W') }
+      if it.type == 'E' then has_error = true else has_warning = true end
+      table.insert(items, it)
+      goto continue
+    end
+    -- gcc/clang without column: file:line: type: message
+    local f2, ln2, typ2, msg2 = l:match("^([^:%c]+):(%d+):%s*(%w+)%s*:%s*(.+)$")
+    if f2 then
+      local it = { filename = f2, lnum = tonumber(ln2), col = 1, text = msg2, type = (typ2 == 'error' and 'E' or 'W') }
+      if it.type == 'E' then has_error = true else has_warning = true end
+      table.insert(items, it)
+      goto continue
+    end
+    -- MSVC cl: file(line) : type Cxxxx: message
+    local fm, lnm, typm, msgm = l:match("^%s*(.-)%((%d+)%)%s*:%s*(%w+)[^:]*:%s*(.+)$")
+    if fm then
+      local it = { filename = fm, lnum = tonumber(lnm), col = 1, text = msgm, type = (typm:lower() == 'error' and 'E' or 'W') }
+      if it.type == 'E' then has_error = true else has_warning = true end
+      table.insert(items, it)
+      goto continue
+    end
+    ::continue::
+  end
+  return items, has_error, has_warning
+end
+
 function B.get_output_name_async(config, sources, preset_name, cb, default_override)
   local is_win = U.is_windows()
   if preset_name and preset_name ~= '' then cb(preset_name) return end

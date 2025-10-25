@@ -40,7 +40,7 @@ function M.parse_make_targets_in_cwd_async(config, cwd, cb)
   local cur_mtime = stat_makefile(cwd)
   local entry = target_cache[cwd]
   if entry and entry.targets and entry.at and (os.time() - entry.at <= ttl) and entry.mtime == cur_mtime then
-    cb(entry.targets)
+    cb({ targets = entry.targets, phony = entry.phony or {} })
     return
   end
   local lines = {}
@@ -52,18 +52,25 @@ function M.parse_make_targets_in_cwd_async(config, cwd, cb)
     end,
     on_exit = function()
       local targets, seen = {}, {}
+      local phony = {}
       for _, l in ipairs(lines) do
-        local name = l:match('^([%w%._%-%+/][^:%$#=]*)%s*:')
-        if name then
-          name = name:gsub('%s+$', '')
-          if not name:match('%%%') and not name:match('^%.') and name ~= 'Makefile' and name ~= 'makefile' then
-            if not seen[name] then seen[name] = true; table.insert(targets, name) end
+        -- collect .PHONY
+        local plist = l:match('^%.PHONY%s*:%s*(.+)')
+        if plist then
+          for name in plist:gmatch('%S+') do phony[name] = true end
+        else
+          local name = l:match('^([%w%._%-%+/][^:%$#=]*)%s*:')
+          if name then
+            name = name:gsub('%s+$', '')
+            if not name:match('%%%') and not name:match('^%.') and name ~= 'Makefile' and name ~= 'makefile' then
+              if not seen[name] then seen[name] = true; table.insert(targets, name) end
+            end
           end
         end
       end
       table.sort(targets)
-      target_cache[cwd] = { mtime = cur_mtime, at = os.time(), targets = targets }
-      cb(targets)
+      target_cache[cwd] = { mtime = cur_mtime, at = os.time(), targets = targets, phony = phony }
+      cb({ targets = targets, phony = phony })
     end,
   })
   if job <= 0 then cb({}) end

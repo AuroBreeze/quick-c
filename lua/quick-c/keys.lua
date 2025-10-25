@@ -15,6 +15,26 @@ function K.setup(config, callbacks)
   map(km.build_and_run, callbacks.build_and_run, "Quick-c: Build & Run current C/C++")
   map(km.debug, callbacks.debug, "Quick-c: Debug current C/C++ exe")
   map(km.make, callbacks.make, "Quick-c: Make targets (Telescope)")
+  -- optional: Telescope-based multi-source selector
+  if km.sources then
+    local function sources_picker()
+      local ok, tel = pcall(require, 'quick-c.telescope')
+      if not ok then return end
+      tel.telescope_quickc_sources(config)
+    end
+    map(km.sources, sources_picker, "Quick-c: Select sources (Telescope)")
+  end
+  if km.quickfix then
+    local function open_quickfix()
+      local cfg = config.diagnostics and config.diagnostics.quickfix or {}
+      if cfg.use_telescope then
+        local ok, tb = pcall(require, 'telescope.builtin')
+        if ok then tb.quickfix(); return end
+      end
+      vim.cmd('copen')
+    end
+    map(km.quickfix, open_quickfix, "Quick-c: Open quickfix list (Telescope)")
+  end
 end
 
 return K

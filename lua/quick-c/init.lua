@@ -119,7 +119,12 @@ function M.setup(opts)
     -- 先合并用户配置
     M.config = vim.tbl_deep_extend("force", M.config, opts or {})
     -- 然后应用项目级配置（覆盖全局配置）
-    M.config = PROJECT_CONFIG.setup(M.config)
+    local merged_config = PROJECT_CONFIG.setup(M.config)
+    if merged_config then
+        M.config = merged_config
+        -- 提示已加载项目配置
+        U.notify_info("已加载项目配置文件 (.quick-c.json)")
+    end
     vim.api.nvim_create_user_command("QuickCBuild", function(opts)
         local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
         if sources then

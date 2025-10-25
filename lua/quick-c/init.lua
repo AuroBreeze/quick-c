@@ -10,6 +10,7 @@ M.config = CFG.defaults
 M.user_opts = {}
 M._last_project_config_path = nil
 M._reload_timer = nil
+M._suppress_notice_until = 0 -- uv.now() deadline in ms
 
 local function is_windows() return U.is_windows() end
 
@@ -146,8 +147,11 @@ local function recompute_config()
         M.config = merged_config
         local root = vim.fn.getcwd()
         local p = PROJECT_CONFIG.find_project_config(root)
+        local now = (vim.loop and vim.loop.now and vim.loop.now()) or 0
         if p and p ~= M._last_project_config_path then
-            U.notify_info("已加载项目配置文件 (.quick-c.json)")
+            if now >= (M._suppress_notice_until or 0) then
+                U.notify_info("已加载项目配置文件 (.quick-c.json)")
+            end
             M._last_project_config_path = p
         end
     else
@@ -213,6 +217,8 @@ function M.setup(opts)
     end, { nargs = "*" })
 
     vim.api.nvim_create_user_command("QuickCReload", function()
+        local uv = vim.loop
+        if uv and uv.now then M._suppress_notice_until = uv.now() + 1000 end
         recompute_config()
         vim.notify("Quick-c: Config reloaded", vim.log.levels.INFO)
     end, {})
@@ -256,6 +262,8 @@ function M.setup(opts)
             local saved = vim.fn.fnamemodify(args.file or '', ':p')
             local expect = vim.fn.fnamemodify(U.join(vim.fn.getcwd(), '.quick-c.json'), ':p')
             if saved == expect then
+                local uv = vim.loop
+                if uv and uv.now then M._suppress_notice_until = uv.now() + 1000 end
                 schedule_recompute(100)
                 vim.schedule(function()
                     vim.notify('Quick-c: 项目配置已保存，已重新加载', vim.log.levels.INFO)

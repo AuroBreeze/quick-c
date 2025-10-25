@@ -1,8 +1,29 @@
 # Quick-c
 
-<a href="https://dotfyle.com/plugins/AuroBreeze/quick-py">
-	<img src="https://dotfyle.com/plugins/AuroBreeze/quick-py/shield?style=for-the-badge" />
-</a>
+<div align="center"><p>
+    <a href="https://github.com/AuroBreeze/quick-c/releases/latest">
+      <img alt="Latest release" src="https://img.shields.io/github/v/release/AuroBreeze/quick-c?style=for-the-badge&logo=starship&color=C9CBFF&logoColor=D9E0EE&labelColor=302D41&include_prerelease&sort=semver" />
+    </a>
+    <a href="https://github.com/AuroBreeze/quick-c/pulse">
+      <img alt="Last commit" src="https://img.shields.io/github/last-commit/AuroBreeze/quick-c?style=for-the-badge&logo=starship&color=8bd5ca&logoColor=D9E0EE&labelColor=302D41"/>
+    </a>
+    <a href="https://github.com/AuroBreeze/quick-c/blob/main/LICENSE">
+      <img alt="License" src="https://img.shields.io/github/license/AuroBreeze/quick-c?style=for-the-badge&logo=starship&color=ee999f&logoColor=D9E0EE&labelColor=302D41" />
+    </a>
+    <a href="https://github.com/AuroBreeze/quick-c/stargazers">
+      <img alt="Stars" src="https://img.shields.io/github/stars/AuroBreeze/quick-c?style=for-the-badge&logo=starship&color=c69ff5&logoColor=D9E0EE&labelColor=302D41" />
+    </a>
+    <a href="https://github.com/AuroBreeze/quick-c/issues">
+      <img alt="Issues" src="https://img.shields.io/github/issues/AuroBreeze/quick-c?style=for-the-badge&logo=bilibili&color=F5E0DC&logoColor=D9E0EE&labelColor=302D41" />
+    </a>
+    <a href="https://github.com/AuroBreeze/quick-c">
+      <img alt="Repo Size" src="https://img.shields.io/github/repo-size/AuroBreeze/quick-c?color=%23DDB6F2&label=SIZE&logo=codesandbox&style=for-the-badge&logoColor=D9E0EE&labelColor=302D41" />
+    </a>
+</p></div>
+
+<p align="center">
+  <b>中文</b> | <a href="README.en.md">English</a>
+</p>
 
 一个面向 C/C++ 的轻量 Neovim 插件：一键编译、运行与调试当前文件，支持 Windows、Linux、macOS，兼容 betterTerm 与内置终端。构建与运行全程异步，不会阻塞 Neovim 主线程。
 
@@ -17,15 +38,6 @@
 - **Make 集成（异步）**：自动解析 `make -qp` 目标，Telescope 选择执行（如 `clean`、`install`）
 - **便捷快捷键**：默认提供 `<leader>cqb`、`<leader>cqr`、`<leader>cqR`、`<leader>cqD`、`<leader>cqM`
  - **LSP 集成（compile_commands.json）**：一键为当前文件目录生成或使用指定 `compile_commands.json` 供 clangd 等 LSP 使用
-
-### v1.1.0 更新摘要
-
-- Telescope 选择器内置 Makefile 预览（目录选择与目标选择均可见，目标选择阶段固定预览所选目录的 Makefile）。
-- 大文件与编码兼容：预览支持字节/行数截断，避免卡顿。
-- 终端发送可配置：`make.telescope.choose_terminal = 'auto'|'always'|'never'`。
-- 选择已有内置终端发送时，会自动打开/聚焦该终端窗口；默认策略仍为 betterTerm 优先、失败回退内置终端。
-- 键位注入采用 `unique=true`，不再覆盖用户已有映射。
-- Windows 路径处理更稳健（预览器使用安全拼接）。
 
 ## 依赖
 
@@ -107,9 +119,16 @@ use({
 - 按 `<leader>cqS` 打开源文件选择器。
 - 在列表中按 Tab 多选（Shift+Tab 往回，多选不移动可用 Ctrl+Space）。
 - 回车后选择操作：Build / Run / Build & Run。
+
+说明：源文件列表显示为相对当前工作目录的路径，内部会使用绝对路径进行构建与运行。
  
 
 默认输出名为当前文件名（Windows 会追加 `.exe`）；如需自定义输出名，构建时可在提示中输入。
+
+输出名与缓存：
+
+- 多文件构建：总是弹出“Output name”输入框；若你对“同一源集合”输入过名称，将自动带出为默认值。
+- 单文件构建：直接使用默认名（同文件名）。
 
 ## 配置
 
@@ -293,6 +312,8 @@ require("quick-c").setup({
 - 满足触发条件时自动打开列表并跳转到第一条；默认仅有错误时打开/跳转。
 - 如已安装 Telescope，默认使用 `:Telescope quickfix` 打开（可在配置关闭）。
 
+提示：若当前缓冲是“未命名且已修改”，为避免保存提示，自动跳转（`cc`）将被跳过，此时请在 quickfix 中手动选择条目即可。
+
 配置示例：
 
 ```lua
@@ -388,8 +409,8 @@ require('quick-c').setup({
 - 无法运行可执行文件：请先 `:QuickCBuild`；或检查输出目录与文件后缀（Windows 需要 `.exe`）
  - 未解析到 make 目标：确认项目存在 `Makefile`，以及 `make -qp` 在该目录下可运行；Windows 可改用 `mingw32-make`
 
-## 目录结构
+## 发布说明
 
-- `plugin/quick-c.lua` 自动调用 `require('quick-c').setup()`
-- `lua/quick-c/init.lua` 插件主体、配置与命令实现
+参见 [Release.md](Release.md)
+
 

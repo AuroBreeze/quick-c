@@ -108,6 +108,24 @@ local function make_run_in_cwd(target, cwd)
     end)
 end
 
+-- Custom make command: resolve cwd, then prompt a full command line for user to edit
+local function make_run_custom_cmd()
+    local prog = choose_make() or 'make'
+    local base = vim.fn.fnamemodify(vim.fn.expand('%:p'), ':h')
+    resolve_make_cwd_async(base, function(cwd)
+        local def = string.format('%s -C %s ', prog, shell_quote_path(cwd))
+        local ui = vim.ui or {}
+        if not ui.input then
+            run_make_in_terminal(def)
+            return
+        end
+        ui.input({ prompt = '运行命令: ', default = def }, function(cmd)
+            if not cmd or cmd == '' then return end
+            run_make_in_terminal(cmd)
+        end)
+    end)
+end
+
 local function telescope_make()
     local ok, mod = pcall(require, 'quick-c.telescope')
     if not ok then
@@ -224,6 +242,9 @@ function M.setup(opts)
         local target = table.concat(opts.fargs or {}, " ")
         make_run_target(target)
     end, { nargs = "*" })
+    vim.api.nvim_create_user_command("QuickCMakeCmd", function()
+        make_run_custom_cmd()
+    end, {})
 
     vim.api.nvim_create_user_command("QuickCReload", function()
         local uv = vim.loop

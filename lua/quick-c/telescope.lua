@@ -104,30 +104,33 @@ function M.telescope_make(config,
             end
             return nil
           end
-          local fixed_path = find_makefile(cwd)
-          local loaded = false
           return previewers.new_buffer_previewer({
             define_preview = function(self)
-              if loaded then return end
-              if not fixed_path or fixed_path == '' then
+              local path = find_makefile(cwd)
+              if not path or path == '' then
                 vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, { '[No Makefile found]' })
-                loaded = true
                 return
               end
-              local st = uv.fs_stat(fixed_path) or {}
+              -- Normalize to absolute path
+              local abspath = vim.fn.fnamemodify(path, ':p')
+              local st = uv.fs_stat(abspath) or {}
               local max_bytes = telcfg.max_preview_bytes or (200 * 1024)
               local max_lines = telcfg.max_preview_lines or 2000
               local set_ft = (telcfg.set_filetype ~= false)
               if st.size and st.size > max_bytes then
-                local ok, lines = pcall(vim.fn.readfile, fixed_path, '', max_lines)
-                if not ok then lines = { '[Preview truncated: failed to read file]' } end
+                local ok, lines = pcall(vim.fn.readfile, abspath, '', max_lines)
+                if not ok or not lines then lines = { '[Preview truncated: failed to read file]' } end
                 table.insert(lines, 1, string.format('[Preview truncated: %d bytes > %d bytes, showing first %d lines]', st.size or 0, max_bytes, max_lines))
                 vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
               else
-                conf_t.buffer_previewer_maker(fixed_path, self.state.bufnr, { bufname = self.state.bufname })
+                local ok = pcall(conf_t.buffer_previewer_maker, abspath, self.state.bufnr, { bufname = self.state.bufname })
+                if not ok then
+                  local ok2, lines = pcall(vim.fn.readfile, abspath)
+                  if not ok2 or not lines then lines = { '[Failed to read Makefile]' } end
+                  vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+                end
               end
               if set_ft then pcall(vim.api.nvim_buf_set_option, self.state.bufnr, 'filetype', 'make') end
-              loaded = true
             end,
           })
         end)(),

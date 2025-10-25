@@ -41,6 +41,15 @@ local function can_execute_prog(p)
   return false
 end
 
+-- Choose a make program only for parsing targets (-q/-p), independent from prefer_force
+local function choose_probe_make()
+  local candidates = { 'make', 'mingw32-make', 'nmake' }
+  for _, name in ipairs(candidates) do
+    if vim.fn.executable(name) == 1 then return name end
+  end
+  return nil
+end
+
 function M.choose_make(config)
   local pref = (config.make or {}).prefer
   local force = ((config.make or {}).prefer_force == true)
@@ -90,14 +99,20 @@ function M.choose_make(config)
 end
 
 function M.parse_make_targets_in_cwd_async(config, cwd, cb)
-  local prog = M.choose_make(config)
-  if not prog then cb({}) return end
-  if not can_execute_prog(prog) then
-    local force = ((config.make or {}).prefer_force == true)
-    local msg = "Quick-c: '" .. tostring(prog) .. "' 不可执行，无法解析目标（请检查 PATH 或配置 make.prefer）"
-    if force then U.notify_warn(msg) else U.notify_err(msg) end
-    cb({})
-    return
+  local pref_prog = M.choose_make(config)
+  if not pref_prog then cb({}) return end
+  local probe = pref_prog
+  if not can_execute_prog(pref_prog) then
+    local alt = choose_probe_make()
+    if alt then
+      U.notify_warn("Quick-c: 使用可用的 make (" .. alt .. ") 解析目标；运行仍使用 '" .. tostring(pref_prog) .. "'")
+      probe = alt
+    else
+      local msg = "Quick-c: 未找到可用于解析目标的 make（make/mingw32-make/nmake），请检查环境或使用 QuickCMakeCmd"
+      U.notify_warn(msg)
+      cb({})
+      return
+    end
   end
   local cache_cfg = ((config.make or {}).cache) or {}
   local ttl = tonumber(cache_cfg.ttl) or 10
@@ -130,7 +145,7 @@ function M.parse_make_targets_in_cwd_async(config, cwd, cb)
   end
   local function run_and_collect(flags, done)
     local lines = {}
-    local job = vim.fn.jobstart({ strip_quotes(prog), flags }, {
+    local job = vim.fn.jobstart({ strip_quotes(probe), flags }, {
       cwd = cwd,
       stdout_buffered = true,
       on_stdout = function(_, data)

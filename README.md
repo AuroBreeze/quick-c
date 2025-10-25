@@ -27,6 +27,10 @@
 
 一个面向 C/C++ 的轻量 Neovim 插件：一键编译、运行与调试当前文件，支持 Windows、Linux、macOS，兼容 betterTerm 与内置终端。构建与运行全程异步，不会阻塞 Neovim 主线程。
 
+<a href="https://dotfyle.com/plugins/AuroBreeze/quick-c">
+  <img src="https://dotfyle.com/plugins/AuroBreeze/quick-c/shield" />
+</a>
+
 ## ✨ 特性
 
  - 🚀 **一键构建/运行（异步）**：`QuickCBuild`、`QuickCRun`、`QuickCBR`（构建并运行）
@@ -148,6 +152,132 @@ use({
   - `<leader>cqf` 打开 quickfix（Telescope）
 
 ## ⚙️ 配置
+
+Quick-c 支持多级配置，优先级从高到低为：
+1. 项目级配置（`.quick-c.json`） - 覆盖全局配置
+2. 用户配置（`setup()` 参数） - 用户自定义配置
+3. 默认配置 - 插件内置默认值
+
+### 项目级配置文件
+
+在项目根目录创建 `.quick-c.json` 文件，可以为特定项目定制配置，覆盖全局配置。当插件检测到项目配置文件时，会自动加载并应用配置。
+
+**配置文件查找规则：**
+- 从当前文件所在目录开始向上查找
+- 找到第一个 `.quick-c.json` 文件即停止
+- 支持嵌套项目，每个子项目可以有独立的配置
+
+**配置格式：**
+- 使用 JSON 格式
+- 配置结构与 Lua 配置相同
+- 支持所有配置选项
+
+示例 `.quick-c.json`：
+```json
+{
+  "outdir": "build",
+  "toolchain": {
+    "windows": {
+      "c": ["gcc", "cl"],
+      "cpp": ["g++", "cl"]
+    },
+    "unix": {
+      "c": ["gcc", "clang"],
+      "cpp": ["g++", "clang++"]
+    }
+  },
+  "compile_commands": {
+    "mode": "generate",
+    "outdir": "build"
+  },
+  "diagnostics": {
+    "quickfix": {
+      "open": "warning",
+      "jump": "warning",
+      "use_telescope": true
+    }
+  },
+  "make": {
+    "prefer": ["make", "mingw32-make"],
+    "cwd": ".",
+    "search": {
+      "up": 2,
+      "down": 3,
+      "ignore_dirs": [".git", "node_modules", ".cache", "build"]
+    },
+    "telescope": {
+      "prompt_title": "项目构建目标"
+    },
+    "cache": {
+      "ttl": 10
+    },
+    "args": {
+      "prompt": true,
+      "default": "-j4",
+      "remember": true
+    }
+  },
+  "keymaps": {
+    "build": "<leader>cb",
+    "run": "<leader>cr",
+    "build_and_run": "<leader>cR",
+    "debug": "<leader>cD",
+    "make": "<leader>cM",
+    "sources": "<leader>cS",
+    "quickfix": "<leader>cf"
+  }
+}
+```
+
+**项目配置文件示例场景：**
+
+1. **构建输出目录定制**
+```json
+{
+  "outdir": "build",
+  "compile_commands": {
+    "mode": "generate",
+    "outdir": "build"
+  }
+}
+```
+
+2. **项目特定工具链**
+```json
+{
+  "toolchain": {
+    "windows": { "c": ["clang", "gcc"] },
+    "unix": { "c": ["clang", "gcc"] }
+  },
+  "make": {
+    "prefer": ["make", "mingw32-make"],
+    "cwd": ".",
+    "search": {
+      "ignore_dirs": [".git", "node_modules", "build", "dist"]
+    }
+  }
+}
+```
+
+3. **项目快捷键定制**
+```json
+{
+  "keymaps": {
+    "build": "<leader>cb",
+    "run": "<leader>cr",
+    "build_and_run": "<leader>cR",
+    "debug": "<leader>cD",
+    "make": "<leader>cM"
+  }
+}
+```
+
+**配置生效时机：**
+- 插件初始化时自动检测并加载
+- 切换不同项目时自动应用对应配置
+- 配置变更需要重新加载插件生效
+
+### 用户配置
 
 最小示例（仅常用项）：
 

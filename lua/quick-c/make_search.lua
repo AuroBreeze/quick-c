@@ -1,6 +1,44 @@
 local U = require('quick-c.util')
 local M = {}
 
+local _cache = { single = {}, multi = {} }
+
+local function _ttl(config)
+  local c = (config.make and config.make.cache and config.make.cache.ttl) or 10
+  return tonumber(c) or 10
+end
+
+local function _now()
+  return os.time()
+end
+
+local function scandir_async(uv, dir, ondone)
+  local ok = pcall(function()
+    uv.fs_scandir(dir, function(err, req)
+      if err or not req then ondone({}) return end
+      local out = {}
+      while true do
+        local name, t = uv.fs_scandir_next(req)
+        if not name then break end
+        out[#out + 1] = { name = name, type = t }
+      end
+      ondone(out)
+    end)
+  end)
+  if ok then return end
+  -- fallback to sync
+  local req = uv.fs_scandir(dir)
+  local out = {}
+  if req then
+    while true do
+      local name, t = uv.fs_scandir_next(req)
+      if not name then break end
+      out[#out + 1] = { name = name, type = t }
+    end
+  end
+  vim.schedule(function() ondone(out) end)
+end
+
 -- 异步非阻塞 Makefile 搜索：分批扫描目录，避免卡主线程
 function M.find_make_root_async(config, start_dir, cb)
   local cfg = config.make or {}
@@ -9,6 +47,20 @@ function M.find_make_root_async(config, start_dir, cb)
   local ignore = (cfg.search and cfg.search.ignore_dirs) or { '.git', 'node_modules', '.cache' }
   local names = { 'Makefile', 'makefile', 'GNUmakefile' }
   local uv = vim.loop
+
+  local key = table.concat({ U.norm(start_dir or ''), up, down }, '|')
+  do
+    local ent = _cache.single[key]
+    if ent and (_now() - ent.ts) < _ttl(config) then
+      vim.schedule(function() cb(ent.val) end)
+      return
+    end
+  end
+
+  local function _done(dir)
+    _cache.single[key] = { val = dir, ts = _now() }
+    cb(dir)
+  end
 
   local function is_ignored(name)
     for _, n in ipairs(ignore) do if name == n then return true end end
@@ -52,43 +104,52 @@ function M.find_make_root_async(config, start_dir, cb)
   local scanning = false
   local found = false
   local batch_size = 40 -- 每 tick 处理的目录数
+  local parallel = 8    -- 并行扫描的目录数
 
   local function step()
     if scanning then return end
     if found then return end
     scanning = true
-    local processed = 0
-    while processed < batch_size and #queue > 0 do
-      local item = table.remove(queue, 1)
-      local dir, depth = item.dir, item.depth
-      -- 命中判断
-      if has_makefile(dir) then
-        found = true
+    local taken = {}
+    local n = math.min(batch_size, #queue, parallel)
+    for i = 1, n do taken[i] = table.remove(queue, 1) end
+    if #taken == 0 then
+      scanning = false
+      if not found then
+        if #queue == 0 then _done(start_dir) else vim.defer_fn(step, 1) end
+      end
+      return
+    end
+    local pending = #taken
+    local function on_one_done()
+      pending = pending - 1
+      if pending == 0 then
         scanning = false
-        cb(dir)
+        if not found then
+          if #queue == 0 then _done(start_dir) else vim.defer_fn(step, 1) end
+        end
+      end
+    end
+    for _, item in ipairs(taken) do
+      local dir, depth = item.dir, item.depth
+      if has_makefile(dir) then
+        if not found then found = true _done(dir) end
+        pending = 0
+        scanning = false
         return
       end
       if depth < down then
-        local req = uv.fs_scandir(dir)
-        if req then
-          while true do
-            local name, t = uv.fs_scandir_next(req)
-            if not name then break end
-            if t == 'directory' and not is_ignored(name) then
-              table.insert(queue, { dir = U.join(dir, name), depth = depth + 1 })
+        scandir_async(uv, dir, function(entries)
+          if found then on_one_done() return end
+          for _, e in ipairs(entries) do
+            if e.type == 'directory' and not is_ignored(e.name) then
+              table.insert(queue, { dir = U.join(dir, e.name), depth = depth + 1 })
             end
           end
-        end
-      end
-      processed = processed + 1
-    end
-    scanning = false
-    if not found then
-      if #queue == 0 then
-        -- 未找到，回退为 start_dir
-        cb(start_dir)
+          on_one_done()
+        end)
       else
-        vim.defer_fn(step, 1) -- 让出主线程，下一个 tick 继续
+        on_one_done()
       end
     end
   end
@@ -99,10 +160,25 @@ end
 -- 收集多个 Makefile 目录（异步，非阻塞）
 function M.find_make_roots_async(config, start_dir, cb)
   local results, seen = {}, {}
+  local cfg = config.make or {}
+  local up = (cfg.search and cfg.search.up) or 2
+  local down = (cfg.search and cfg.search.down) or 3
+  local key = table.concat({ U.norm(start_dir or ''), up, down }, '|')
+  do
+    local ent = _cache.multi[key]
+    if ent and (_now() - ent.ts) < _ttl(config) then
+      vim.schedule(function() cb(vim.deepcopy(ent.val)) end)
+      return
+    end
+  end
+
+  local function _done(list)
+    _cache.multi[key] = { val = vim.deepcopy(list), ts = _now() }
+    cb(list)
+  end
+
   M.find_make_root_async(config, start_dir, function()
     local cfg = config.make or {}
-    local up = (cfg.search and cfg.search.up) or 2
-    local down = (cfg.search and cfg.search.down) or 3
     local names = { 'Makefile', 'makefile', 'GNUmakefile' }
     local uv = vim.loop
     local ignore = (cfg.search and cfg.search.ignore_dirs) or { '.git', 'node_modules', '.cache' }
@@ -140,35 +216,41 @@ function M.find_make_roots_async(config, start_dir, cb)
     for _, b in ipairs(bases) do table.insert(queue, { dir = b, depth = 0 }) end
     local batch_size = 50
     local function step()
-      local processed = 0
-      while processed < batch_size and #queue > 0 do
-        local item = table.remove(queue, 1)
-        local dir, depth = item.dir, item.depth
-        if has_makefile(dir) and not seen[dir] then
-          seen[dir] = true
-          table.insert(results, dir)
-        end
-        if depth < down then
-          local req = uv.fs_scandir(dir)
-          if req then
-            while true do
-              local name, t = uv.fs_scandir_next(req)
-              if not name then break end
-              if t == 'directory' and not is_ignored(name) then
-                table.insert(queue, { dir = U.join(dir, name), depth = depth + 1 })
-              end
-            end
-          end
-        end
-        processed = processed + 1
-      end
-      if #queue > 0 then
-        vim.defer_fn(step, 1)
-      else
-        table.sort(results)
-        cb(results)
+    local taken = {}
+    local n = math.min(batch_size, #queue, 8)
+    for i = 1, n do taken[i] = table.remove(queue, 1) end
+    if #taken == 0 then
+      table.sort(results)
+      _done(results)
+      return
+    end
+    local pending = #taken
+    local function on_one_done()
+      pending = pending - 1
+      if pending == 0 then
+        if #queue > 0 then vim.defer_fn(step, 1) else table.sort(results) _done(results) end
       end
     end
+    for _, item in ipairs(taken) do
+      local dir, depth = item.dir, item.depth
+      if has_makefile(dir) and not seen[dir] then
+        seen[dir] = true
+        table.insert(results, dir)
+      end
+      if depth < down then
+        scandir_async(uv, dir, function(entries)
+          for _, e in ipairs(entries) do
+            if e.type == 'directory' and not is_ignored(e.name) then
+              table.insert(queue, { dir = U.join(dir, e.name), depth = depth + 1 })
+            end
+          end
+          on_one_done()
+        end)
+      else
+        on_one_done()
+      end
+    end
+  end
     step()
   end)
 end

@@ -99,6 +99,84 @@ If the current buffer is unnamed and modified, auto-jump from diagnostics is ski
 
 ## ⚙️ Configuration
 
+Quick-c supports multi-level configuration with priority from high to low:
+1. Project-level configuration (`.quick-c.json`) - overrides global config
+2. User configuration (`setup()` parameters) - user customizations
+3. Default configuration - plugin built-in defaults
+
+### Project-level Configuration File
+
+Create a `.quick-c.json` file in your project root directory to customize configuration for specific projects, overriding global settings. The plugin automatically detects and applies project configuration when available.
+
+**Configuration file lookup rules:**
+- Search upward from the current file's directory
+- Stop at the first `.quick-c.json` file found
+- Support nested project structures
+
+**Configuration format:**
+- JSON format
+- Same structure as Lua configuration
+- Support all configuration options
+
+Example `.quick-c.json`:
+```json
+{
+  "outdir": "build",
+  "toolchain": {
+    "windows": {
+      "c": ["gcc", "cl"],
+      "cpp": ["g++", "cl"]
+    },
+    "unix": {
+      "c": ["gcc", "clang"],
+      "cpp": ["g++", "clang++"]
+    }
+  },
+  "compile_commands": {
+    "mode": "generate",
+    "outdir": "build"
+  },
+  "diagnostics": {
+    "quickfix": {
+      "open": "warning",
+      "jump": "warning",
+      "use_telescope": true
+    }
+  },
+  "make": {
+    "prefer": ["make", "mingw32-make"],
+    "cwd": ".",
+    "search": {
+      "up": 2,
+      "down": 3,
+      "ignore_dirs": [".git", "node_modules", ".cache", "build"]
+    },
+    "telescope": {
+      "prompt_title": "Project Build Targets"
+    },
+    "cache": {
+      "ttl": 10
+    },
+    "args": {
+      "prompt": true,
+      "default": "-j4",
+      "remember": true
+    }
+  },
+  "keymaps": {
+    "build": "<leader>cb",
+    "run": "<leader>cr",
+    "build_and_run": "<leader>cR",
+    "debug": "<leader>cD",
+    "make": "<leader>cM",
+    "sources": "<leader>cS",
+    "quickfix": "<leader>cf"
+  }
+}
+```
+
+### User Configuration
+
 Minimal example:
 
 ```lua

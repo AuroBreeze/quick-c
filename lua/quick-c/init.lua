@@ -200,6 +200,20 @@ function M.setup(opts)
         make_run_target(target)
     end, { nargs = "*" })
 
+    -- Debug: show effective config and detected project config path
+    vim.api.nvim_create_user_command("QuickCConfig", function()
+        local cfg = M.config
+        local ok, inspect = pcall(vim.inspect, cfg)
+        local lines = {}
+        table.insert(lines, "Quick-c: Effective Config")
+        table.insert(lines, ok and inspect or "<inspect failed>")
+        local root = vim.fn.getcwd()
+        local p = PROJECT_CONFIG.find_project_config(root)
+        table.insert(lines, "Project root: " .. root)
+        table.insert(lines, "Project config: " .. (p or "<not found>"))
+        vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+    end, {})
+
     require('quick-c.keys').setup(M.config, {
         build = build,
         run = run,

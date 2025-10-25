@@ -180,6 +180,8 @@ Quick-c 支持多级配置，优先级从高到低为：
 - 使用命令 `:QuickCReload` 手动重载
 - 使用命令 `:QuickCConfig` 查看“生效配置”和检测到的项目配置路径
 
+
+具体指导：[GUIDE](markdown/cn/PROJECT_CONFIG_GUIDE.md)
 ### 用户配置
 
 最小示例（仅常用项）：

@@ -120,6 +120,8 @@ Create a `.quick-c.json` file in your project root directory to customize config
 - Same structure as Lua configuration
 - Support all configuration options
 
+more details in [GUIDE](markdown/en/PROJECT_CONFIG_GUIDE.en.md).
+
 Example `.quick-c.json` (annotated):
 ```jsonc
 {

@@ -25,6 +25,11 @@
 
 # Quick-c
 
+> [!IMPORTANT]
+> This document is not synchronized with the Chinese document and may lag behind the Chinese document.
+>
+> I would be very grateful if you could translate or correct errors in this document.
+
 Lightweight Neovim plugin for C/C++: build, run, and debug the current file in one key. Works on Windows/Linux/macOS. Integrates with BetterTerm and the built-in terminal. Fully async.
 
 ## ✨ Features

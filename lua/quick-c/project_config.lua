@@ -35,14 +35,31 @@ function M.load_project_config(config_path)
 
     local json_str = table.concat(content, "\n")
 
+    -- 处理 UTF-8 BOM
+    local bom = string.char(0xEF, 0xBB, 0xBF)
+    if json_str:sub(1, 3) == bom then
+        json_str = json_str:sub(4)
+    end
+
     -- 检查 JSON 内容是否为空
     if json_str:match("^%s*$") then
         U.notify_warn("项目配置文件为空: " .. config_path)
         return nil
     end
 
-    -- 使用 vim.json.decode 解析 JSON
-    local ok, config = pcall(vim.json.decode, json_str)
+    -- 使用可用的 JSON 解码器解析（优先 vim.json.decode，其次 vim.fn.json_decode）
+    local decoder
+    if vim and vim.json and type(vim.json.decode) == 'function' then
+        decoder = vim.json.decode
+    elseif vim and vim.fn and type(vim.fn.json_decode) == 'function' then
+        decoder = vim.fn.json_decode
+    end
+    if not decoder then
+        U.notify_warn("未找到 JSON 解析器，无法加载项目配置")
+        return nil
+    end
+
+    local ok, config = pcall(decoder, json_str)
     if not ok then
         U.notify_warn("项目配置文件格式错误: " .. config_path)
         return nil

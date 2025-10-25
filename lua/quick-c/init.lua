@@ -7,6 +7,7 @@ local CFG = require('quick-c.config')
 local PROJECT_CONFIG = require('quick-c.project_config')
 
 M.config = CFG.defaults
+M.user_opts = {}
 
 local function is_windows() return U.is_windows() end
 
@@ -136,16 +137,15 @@ local function cc_use()
     require('quick-c.cc').use_external(cfg, { err = notify_err, warn = notify_warn, info = notify_info })
 end
 
-function M.setup(opts)
-    -- 先合并用户配置
-    M.config = vim.tbl_deep_extend("force", M.config, opts or {})
-    -- 然后应用项目级配置（覆盖全局配置）
+local function recompute_config()
+    M.config = vim.tbl_deep_extend("force", CFG.defaults, M.user_opts or {})
     local merged_config = PROJECT_CONFIG.setup(M.config)
-    if merged_config then
-        M.config = merged_config
-        -- 提示已加载项目配置
-        U.notify_info("已加载项目配置文件 (.quick-c.json)")
-    end
+    if merged_config then M.config = merged_config U.notify_info("已加载项目配置文件 (.quick-c.json)") end
+end
+
+function M.setup(opts)
+    M.user_opts = opts or {}
+    recompute_config()
     vim.api.nvim_create_user_command("QuickCBuild", function(opts)
         local sources = opts.fargs and #opts.fargs > 0 and opts.fargs or nil
         if sources then
@@ -200,6 +200,11 @@ function M.setup(opts)
         make_run_target(target)
     end, { nargs = "*" })
 
+    vim.api.nvim_create_user_command("QuickCReload", function()
+        recompute_config()
+        vim.notify("Quick-c: Config reloaded", vim.log.levels.INFO)
+    end, {})
+
     -- Debug: show effective config and detected project config path
     vim.api.nvim_create_user_command("QuickCConfig", function()
         local cfg = M.config
@@ -213,6 +218,8 @@ function M.setup(opts)
         table.insert(lines, "Project config: " .. (p or "<not found>"))
         vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
     end, {})
+
+    pcall(vim.api.nvim_create_autocmd, 'DirChanged', { callback = function() pcall(recompute_config) end })
 
     require('quick-c.keys').setup(M.config, {
         build = build,

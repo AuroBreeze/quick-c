@@ -17,6 +17,30 @@ local function stat_makefile(cwd)
   return nil
 end
 
+local function strip_quotes(s)
+  if type(s) ~= 'string' then return s end
+  local a = s:match('^%s*"(.*)"%s*$') or s:match("^%s*'(.*)'%s*$")
+  return a or s
+end
+
+local function can_execute_prog(p)
+  local prog = strip_quotes(p)
+  if not prog or prog == '' then return false end
+  if vim.fn.executable(prog) == 1 then return true end
+  -- If it's a path, check file existence (may still fail to exec, but avoid jobstart crash)
+  local is_path
+  if U.is_windows() then
+    is_path = prog:match('[\\/]') or prog:match('%.exe$')
+  else
+    is_path = prog:sub(1,1) == '/' or prog:match('[\\/]')
+  end
+  if is_path then
+    local st = vim.loop.fs_stat(prog)
+    return st and st.type == 'file'
+  end
+  return false
+end
+
 function M.choose_make(config)
   local pref = (config.make or {}).prefer
   local force = ((config.make or {}).prefer_force == true)
@@ -68,6 +92,11 @@ end
 function M.parse_make_targets_in_cwd_async(config, cwd, cb)
   local prog = M.choose_make(config)
   if not prog then cb({}) return end
+  if not can_execute_prog(prog) then
+    U.notify_err("'" .. tostring(prog) .. "' 不可执行，无法解析目标（请检查 PATH 或配置 make.prefer）")
+    cb({})
+    return
+  end
   local cache_cfg = ((config.make or {}).cache) or {}
   local ttl = tonumber(cache_cfg.ttl) or 10
   local cur_mtime = stat_makefile(cwd)
@@ -77,7 +106,7 @@ function M.parse_make_targets_in_cwd_async(config, cwd, cb)
     return
   end
   local lines = {}
-  local job = vim.fn.jobstart({ prog, '-qp' }, {
+  local job = vim.fn.jobstart({ strip_quotes(prog), '-qp' }, {
     cwd = cwd,
     stdout_buffered = true,
     on_stdout = function(_, data)

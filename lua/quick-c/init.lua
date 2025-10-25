@@ -249,6 +249,21 @@ function M.setup(opts)
         schedule_recompute(400)
     end })
 
+    -- Auto-reload when saving project config in current root
+    pcall(vim.api.nvim_create_autocmd, 'BufWritePost', {
+        pattern = '.quick-c.json',
+        callback = function(args)
+            local saved = vim.fn.fnamemodify(args.file or '', ':p')
+            local expect = vim.fn.fnamemodify(U.join(vim.fn.getcwd(), '.quick-c.json'), ':p')
+            if saved == expect then
+                schedule_recompute(100)
+                vim.schedule(function()
+                    vim.notify('Quick-c: 项目配置已保存，已重新加载', vim.log.levels.INFO)
+                end)
+            end
+        end,
+    })
+
     require('quick-c.keys').setup(M.config, {
         build = build,
         run = run,

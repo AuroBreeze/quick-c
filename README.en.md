@@ -79,6 +79,8 @@ If the current buffer is unnamed and modified, auto-jump from diagnostics is ski
 - `:QuickCMake`, `:QuickCMakeRun [target]`
 - `:QuickCCompileDB`, `:QuickCCompileDBGen`, `:QuickCCompileDBUse`
 - `:QuickCQuickfix` open quickfix (Telescope if available)
+- `:QuickCReload` recompute defaults+user+project configuration
+- `:QuickCConfig` print effective configuration and detected project config path
 
 ## ⌨️ Keymaps (normal mode)
 
@@ -109,9 +111,9 @@ Quick-c supports multi-level configuration with priority from high to low:
 Create a `.quick-c.json` file in your project root directory to customize configuration for specific projects, overriding global settings. The plugin automatically detects and applies project configuration when available.
 
 **Configuration file lookup rules:**
-- Search upward from the current file's directory
-- Stop at the first `.quick-c.json` file found
-- Support nested project structures
+- Only search in the current working directory (`:pwd`, project root)
+- File name is fixed to `.quick-c.json`
+- On directory change (`DirChanged`), configuration is auto reloaded (with 400ms debounce)
 
 **Configuration format:**
 - JSON format
@@ -280,7 +282,7 @@ use({
 
 ## 📚 Telescope preview notes
 
-- Both directory and target pickers include a Makefile preview.
+- Both directory and target pickers include a Makefile preview with improved Windows path compatibility.
 - In the target picker, the preview is fixed to the Makefile in the selected directory (no live refresh for performance).
 - Large files are truncated by bytes/lines; controlled by:
   - `make.telescope.preview`
@@ -303,6 +305,9 @@ use({
   - For each level, recursively downward up to `search.down` (default 3)
   - The first directory containing `Makefile`/`makefile`/`GNUmakefile` is used as cwd
   - Directories in `ignore_dirs` are skipped (default: `.git`, `node_modules`, `.cache`)
+  - Enhancement: for ignored directories, perform a one-level probe (no recursion). If a Makefile exists at the root of that ignored directory, include it as a candidate
+
+When multiple results are found, Telescope shows paths relative to `:pwd` for clarity (e.g., `./build`, `./sub/dir`).
 
 ## 🛠️ Architecture
 

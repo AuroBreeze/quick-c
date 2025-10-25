@@ -142,8 +142,19 @@ function M.find_make_root_async(config, start_dir, cb)
         scandir_async(uv, dir, function(entries)
           if found then on_one_done() return end
           for _, e in ipairs(entries) do
-            if e.type == 'directory' and not is_ignored(e.name) then
-              table.insert(queue, { dir = U.join(dir, e.name), depth = depth + 1 })
+            if e.type == 'directory' then
+              local subdir = U.join(dir, e.name)
+              if is_ignored(e.name) then
+                -- one-level probe for ignored directory
+                if has_makefile(subdir) then
+                  if not found then found = true _done(subdir) end
+                  pending = 0
+                  scanning = false
+                  return
+                end
+              else
+                table.insert(queue, { dir = subdir, depth = depth + 1 })
+              end
             end
           end
           on_one_done()
@@ -240,8 +251,16 @@ function M.find_make_roots_async(config, start_dir, cb)
       if depth < down then
         scandir_async(uv, dir, function(entries)
           for _, e in ipairs(entries) do
-            if e.type == 'directory' and not is_ignored(e.name) then
-              table.insert(queue, { dir = U.join(dir, e.name), depth = depth + 1 })
+            if e.type == 'directory' then
+              local subdir = U.join(dir, e.name)
+              if is_ignored(e.name) then
+                if has_makefile(subdir) and not seen[subdir] then
+                  seen[subdir] = true
+                  table.insert(results, subdir)
+                end
+              else
+                table.insert(queue, { dir = subdir, depth = depth + 1 })
+              end
             end
           end
           on_one_done()

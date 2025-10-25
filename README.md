@@ -141,6 +141,8 @@ use({
   - `QuickCMake`/`QuickCMakeRun [target]`
   - `QuickCCompileDB`/`QuickCCompileDBGen`/`QuickCCompileDBUse`
   - `QuickCQuickfix`（打开 quickfix，优先 Telescope）
+  - `QuickCReload`（重新计算默认+用户+项目配置）
+  - `QuickCConfig`（打印生效配置与项目配置路径）
 
 - 默认键位（普通模式）：
   - `<leader>cqb` 构建
@@ -163,9 +165,9 @@ Quick-c 支持多级配置，优先级从高到低为：
 在项目根目录创建 `.quick-c.json` 文件，可以为特定项目定制配置，覆盖全局配置。当插件检测到项目配置文件时，会自动加载并应用配置。
 
 **配置文件查找规则：**
-- 从当前文件所在目录开始向上查找
-- 找到第一个 `.quick-c.json` 文件即停止
-- 支持嵌套项目，每个子项目可以有独立的配置
+- 仅在当前工作目录（`:pwd`，项目根）查找
+- 文件名固定为 `.quick-c.json`
+- 如切换目录（`DirChanged`），会自动重新载入（含 400ms 防抖）
 
 **配置格式：**
 - 使用 JSON 格式
@@ -274,8 +276,9 @@ Quick-c 支持多级配置，优先级从高到低为：
 
 **配置生效时机：**
 - 插件初始化时自动检测并加载
-- 切换不同项目时自动应用对应配置
-- 配置变更需要重新加载插件生效
+- 切换不同项目（`:cd` 改变 `:pwd`）时自动应用（400ms 防抖）
+- 使用命令 `:QuickCReload` 手动重载
+- 使用命令 `:QuickCConfig` 查看“生效配置”和检测到的项目配置路径
 
 ### 用户配置
 
@@ -497,7 +500,7 @@ require('quick-c').setup({
 
 ### 📚 Telescope 预览说明
 
-- 目录选择器与目标选择器均内置 Makefile 预览。
+- 目录选择器与目标选择器均内置 Makefile 预览，Windows 路径兼容更好。
 - 目标选择器阶段，预览固定显示已选目录中的 Makefile，不随光标移动刷新（避免卡顿）。
 - 对大文件自动截断，受以下配置项控制：
   - `make.telescope.preview`：是否启用预览。
@@ -520,6 +523,9 @@ require('quick-c').setup({
   - 在每一层向下递归至多 `search.down` 层（默认 3 层）
   - 找到包含 `Makefile`/`makefile`/`GNUmakefile` 的首个目录作为工作目录
   - 会跳过 `ignore_dirs` 名单中的目录（默认：`.git`、`node_modules`、`.cache`）
+  - 增强：对被忽略目录进行“第一层探测”（不递归），若该目录根下存在 Makefile，则也纳入候选
+
+多结果时，Telescope 列表显示相对于 `:pwd` 的相对路径，便于识别（如 `./build`、`./sub/dir`）。
 
 ## 🛠️ 架构说明
 

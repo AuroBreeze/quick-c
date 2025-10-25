@@ -111,13 +111,20 @@ local function parse_diagnostics(lines)
   local items = {}
   local has_error = false
   local has_warning = false
+  local function clean_path(p)
+    if not p or p == '' then return p end
+    -- trim spaces and surrounding quotes
+    p = p:gsub('^%s+', ''):gsub('%s+$', '')
+    p = p:gsub('^"(.+)"$', '%1'):gsub("^'(.-)'$", '%1')
+    return p
+  end
   for _, l in ipairs(lines or {}) do
     if type(l) ~= 'string' or l == '' then goto continue end
     -- gcc/clang with column: file:line:col: type: message
     -- allow Windows drive letters and colons in paths by making filename greedy
     local f, ln, col, typ, msg = l:match("^(.+):(%d+):(%d+):%s*(%w+)%s*:%s*(.+)$")
     if f then
-      local it = { filename = f, lnum = tonumber(ln), col = tonumber(col), text = msg, type = (typ == 'error' and 'E' or 'W') }
+      local it = { filename = clean_path(f), lnum = tonumber(ln), col = tonumber(col), text = msg, type = (typ == 'error' and 'E' or 'W') }
       if it.type == 'E' then has_error = true else has_warning = true end
       table.insert(items, it)
       goto continue
@@ -125,7 +132,7 @@ local function parse_diagnostics(lines)
     -- gcc/clang without column: file:line: type: message
     local f2, ln2, typ2, msg2 = l:match("^(.+):(%d+):%s*(%w+)%s*:%s*(.+)$")
     if f2 then
-      local it = { filename = f2, lnum = tonumber(ln2), col = 1, text = msg2, type = (typ2 == 'error' and 'E' or 'W') }
+      local it = { filename = clean_path(f2), lnum = tonumber(ln2), col = 1, text = msg2, type = (typ2 == 'error' and 'E' or 'W') }
       if it.type == 'E' then has_error = true else has_warning = true end
       table.insert(items, it)
       goto continue
@@ -133,7 +140,7 @@ local function parse_diagnostics(lines)
     -- MSVC cl: file(line) : type Cxxxx: message
     local fm, lnm, typm, msgm = l:match("^%s*(.-)%((%d+)%)%s*:%s*(%w+)[^:]*:%s*(.+)$")
     if fm then
-      local it = { filename = fm, lnum = tonumber(lnm), col = 1, text = msgm, type = (typm:lower() == 'error' and 'E' or 'W') }
+      local it = { filename = clean_path(fm), lnum = tonumber(lnm), col = 1, text = msgm, type = (typm:lower() == 'error' and 'E' or 'W') }
       if it.type == 'E' then has_error = true else has_warning = true end
       table.insert(items, it)
       goto continue
@@ -235,7 +242,16 @@ function B.build(config, notify, opts)
                 vim.cmd('copen')
               end
             end
-            if should_jump() then pcall(vim.cmd, 'cc') end
+            if should_jump() then
+              local cur = vim.api.nvim_get_current_buf()
+              local name = vim.api.nvim_buf_get_name(cur)
+              local modified = false
+              pcall(function() modified = vim.api.nvim_buf_get_option(cur, 'modified') end)
+              -- 避免在“未命名且已修改”的缓冲上自动跳转，防止保存提示
+              if not (name == '' and modified) then
+                pcall(vim.cmd, 'silent! keepalt keepjumps cc')
+              end
+            end
           else
             -- clear quickfix on successful build without diagnostics
             if code == 0 then vim.fn.setqflist({}) end

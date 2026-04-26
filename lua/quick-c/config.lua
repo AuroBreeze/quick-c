@@ -63,6 +63,8 @@ C.defaults = {
     --   - 仅借用 CMake 导出（即使平时用 make）：
     --       :QuickCCompileDBGenCMake 或将 mode 设为 'cmake' 后 :QuickCCompileDB
     mode = 'generate',
+    -- 可选：find_dir = ''，从此路径复制
+    --
     -- outdir：生成/复制的目标位置
     --   'source'  : 写到“当前源文件目录”。当为多文件/项目生成时，内部会优先写到项目根（便于 clangd 发现）
     --   'cwd'     : 直接写到当前工作目录（项目根）

@@ -1,3 +1,5 @@
+--generate_from_cmake: Line 203
+
 local U = require 'quick-c.util'
 local CM = require 'quick-c.cmake'
 
@@ -224,7 +226,14 @@ function CC.generate_from_cmake(config, notify)
         notify.err 'CMake configuration failed (cannot export compile_commands)'
         return
       end
-      local src = (bdir .. '/compile_commands.json')
+      --WINOE: If user configed the compile_commands.find_dir
+      local compile_command_dir = bdir
+      if cfg.compile_commands.find_dir ~= nil then
+          compile_command_dir = cfg.compile_commands.find_dir
+          --vim.notify(cfg.compile_commands.find_dir)
+      end
+
+      local src = (compile_command_dir .. '/compile_commands.json')
       if vim.fn.filereadable(src) ~= 1 then
         notify.err('Not found: ' .. src)
         return

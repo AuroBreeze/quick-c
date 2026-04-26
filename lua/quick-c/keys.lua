@@ -7,7 +7,6 @@ function K.setup(config, callbacks)
   if km.enabled == false then
     return
   end
-  
 
   -- Option: unmap previous default keys when changed/disabled (default: true)
   local do_unmap = true

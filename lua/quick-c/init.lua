@@ -1,3 +1,6 @@
+-- Setup: Line 236
+-- QuickCCompileDBGenCCMake: Line 309
+
 local M = {}
 local T = require 'quick-c.terminal'
 local AS = require 'quick-c.autosave'
